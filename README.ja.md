@@ -4,6 +4,8 @@
 
 `mizchi/v8` は、MoonBit から V8 を扱うための native 専用バインディングです。Node や Deno のような埋め込みランタイムを、MoonBit 主導で試作するための土台として作っています。
 
+> Experimental release note: Moon `0.1.20260309` / MoonBit `v0.8.3` 時点では、consumer 側に prebuild と link の設定がまだ必要です。
+
 ## できること
 
 - script / module を MoonBit から評価する

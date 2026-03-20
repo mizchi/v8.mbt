@@ -4,6 +4,8 @@
 
 `mizchi/v8` is a native-only V8 binding for MoonBit. It is intended as a foundation for prototyping MoonBit-first embedded runtimes in the style of Node or Deno.
 
+> Experimental release note: on Moon `0.1.20260309` / MoonBit `v0.8.3`, this package still requires consumer-side prebuild and link setup.
+
 ## What You Can Do
 
 - evaluate scripts and modules from MoonBit
