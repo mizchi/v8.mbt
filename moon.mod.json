@@ -2,7 +2,7 @@
   "name": "mizchi/v8",
   "version": "0.1.0",
   "readme": "src/README.mbt.md",
-  "repository": "https://github.com/mizchi/v8",
+  "repository": "https://github.com/mizchi/v8.mbt",
   "license": "Apache-2.0",
   "keywords": [
     "moonbit",
