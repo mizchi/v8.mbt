@@ -1,0 +1,16 @@
+{
+  "name": "mizchi/v8",
+  "version": "0.1.0",
+  "readme": "src/README.mbt.md",
+  "repository": "https://github.com/mizchi/v8",
+  "license": "Apache-2.0",
+  "keywords": [
+    "moonbit",
+    "v8",
+    "javascript",
+    "runtime"
+  ],
+  "description": "MoonBit bindings for V8 aimed at prototyping MoonBit-first runtimes in the style of Node or Deno.",
+  "source": "src",
+  "preferred-target": "native"
+}

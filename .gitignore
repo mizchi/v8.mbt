@@ -1,0 +1,9 @@
+.DS_Store
+_build/
+target/
+target
+.mooncakes/
+.repos/
+.moonagent/
+deps/rusty_v8/
+native/bridge/target/

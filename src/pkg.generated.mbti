@@ -1,0 +1,35 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/v8"
+
+// Values
+pub fn eval_string(String) -> Result[String, V8Error]
+
+pub fn runtime_new() -> Result[Runtime, V8Error]
+
+pub fn version() -> String
+
+pub fn[T] with_runtime((Runtime) -> Result[T, V8Error]) -> Result[T, V8Error]
+
+// Errors
+pub suberror V8Error {
+  DependencyMissing(String)
+  NativeError(String)
+  RuntimeClosed
+}
+pub impl Eq for V8Error
+pub impl Show for V8Error
+
+// Types and methods
+pub struct Runtime {
+  // private fields
+}
+pub fn Runtime::dispose(Self) -> Unit
+pub fn Runtime::eval_string(Self, String) -> Result[String, V8Error]
+pub fn Runtime::is_closed(Self) -> Bool
+
+type RuntimeState
+
+// Type aliases
+
+// Traits
+
