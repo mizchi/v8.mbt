@@ -64,6 +64,7 @@ This document tracks the implementation status, design notes, and known limitati
 - only one runtime can exist at a time
 - no Node / Deno compatibility layer
 - async host integration is still queue-based because async host callbacks are not implemented
+- consumer modules still need their own prebuild and link glue when importing this package from mooncakes today
 
 ## Design Notes
 

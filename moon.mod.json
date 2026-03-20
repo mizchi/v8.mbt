@@ -1,7 +1,7 @@
 {
   "name": "mizchi/v8",
   "version": "0.1.0",
-  "readme": "src/README.mbt.md",
+  "readme": "README.md",
   "repository": "https://github.com/mizchi/v8.mbt",
   "license": "Apache-2.0",
   "keywords": [
@@ -12,5 +12,20 @@
   ],
   "description": "MoonBit bindings for V8 aimed at prototyping MoonBit-first runtimes in the style of Node or Deno.",
   "source": "src",
-  "preferred-target": "native"
+  "preferred-target": "native",
+  "supported-targets": [
+    "native"
+  ],
+  "exclude": [
+    "_build",
+    "target",
+    "deps/rusty_v8",
+    "src/build-stamps",
+    "trace.json",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "scripts": {
+    "postadd": "bash src/scripts/postadd.sh"
+  }
 }

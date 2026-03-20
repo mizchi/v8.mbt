@@ -20,7 +20,50 @@
 - usable as an embedder-facing experimental binding
 - implementation status and known gaps are tracked in [docs/development-log.md](docs/development-log.md)
 
-## Quick Start
+## Install From mooncakes
+
+```bash
+moon add mizchi/v8
+mkdir -p scripts
+cp .mooncakes/mizchi/v8/docs/examples/mizchi-v8-consumer-prebuild.mjs scripts/
+moon check --target native
+```
+
+With Moon `0.1.20260309` / MoonBit `v0.8.3`, dependency-side native hooks are not applied to consumers automatically. In practice, consumers need one small prebuild script in their own module.
+
+Add this to your `moon.mod.json`:
+
+```json
+{
+  "--moonbit-unstable-prebuild": "scripts/mizchi-v8-consumer-prebuild.mjs"
+}
+```
+
+And add this to the package that produces your final native binary:
+
+```moonbit
+options(
+  "is-main": true,
+  link: {
+    "native": {
+      "cc-link-flags": "${build.MIZCHI_V8_CC_LINK_FLAGS}",
+    },
+  },
+)
+```
+
+### Prerequisites
+
+- `git`
+- `bash`
+- Rust toolchain with `cargo`
+- a native C/C++ toolchain
+- `node` for the consumer-side prebuild script
+- network access to GitHub, crates.io, and the `rusty_v8` release mirror
+
+The published package also uses a `postadd` hook to eagerly build the native bridge in the installed module cache, but the consumer-side link setup is still required today.
+
+### Develop From Source
 
 ```bash
 git clone https://github.com/mizchi/v8.mbt
@@ -29,7 +72,7 @@ just bootstrap
 just test
 ```
 
-`just bootstrap` builds `deps/rusty_v8` and the Rust bridge so the MoonBit package can link against them.
+`just bootstrap` builds `deps/rusty_v8` and the Rust bridge in the current checkout. End users installing from mooncakes do not need to run it manually.
 
 ## Minimal Example
 
@@ -97,6 +140,8 @@ For the complete public surface and more examples, see [src/README.mbt.md](src/R
 - only one runtime can exist at a time
 - async host callback surface is not implemented yet
 - this project targets low-level embedder bindings, not Node / Deno compatibility APIs
+- consumers still need a small module-level prebuild setup today
+- local path dependencies do not get the same install-time hook behavior as `moon add`
 
 ## Documentation
 

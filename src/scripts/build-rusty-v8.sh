@@ -41,6 +41,32 @@ if [[ ! -f "$repo_dir/v8/include/v8.h" ]]; then
   exit 1
 fi
 
+if [[ -z "${RUSTY_V8_SRC_BINDING_PATH:-}" ]]; then
+  host_os="$(uname -s)"
+  host_arch="$(uname -m)"
+  binding_suffix=""
+  case "$host_os:$host_arch" in
+    Darwin:arm64 | Darwin:aarch64)
+      binding_suffix="aarch64-apple-darwin"
+      ;;
+    Darwin:x86_64)
+      binding_suffix="x86_64-apple-darwin"
+      ;;
+    Linux:x86_64)
+      binding_suffix="x86_64-unknown-linux-gnu"
+      ;;
+    Linux:arm64 | Linux:aarch64)
+      binding_suffix="aarch64-unknown-linux-gnu"
+      ;;
+  esac
+  if [[ -n "$binding_suffix" ]]; then
+    binding_path="$repo_dir/gen/src_binding_release_${binding_suffix}.rs"
+    if [[ -f "$binding_path" ]]; then
+      export RUSTY_V8_SRC_BINDING_PATH="$binding_path"
+    fi
+  fi
+fi
+
 export RUSTY_V8_MIRROR="${RUSTY_V8_MIRROR:-https://github.com/denoland/rusty_v8/releases/download}"
 export CARGO_TARGET_DIR="$bridge_target_dir"
 

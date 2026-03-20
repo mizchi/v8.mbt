@@ -64,6 +64,7 @@
 - `rusty_v8::OwnedIsolate` の扱いに合わせて、同時に 1 runtime のみ許可している
 - Node / Deno 互換層は提供していない
 - async host callback はまだないので、非同期 host 連携は queue ベースの op で回す前提
+- 現状は mooncakes から import する consumer module 側にも prebuild と link glue が必要
 
 ## 設計メモ
 

@@ -20,7 +20,50 @@
 - embedder 実験用として使える状態です
 - 実装状況と未実装項目は [docs/development-log.ja.md](docs/development-log.ja.md) に分離しています
 
-## Quick Start
+## mooncakes から使う
+
+```bash
+moon add mizchi/v8
+mkdir -p scripts
+cp .mooncakes/mizchi/v8/docs/examples/mizchi-v8-consumer-prebuild.mjs scripts/
+moon check --target native
+```
+
+Moon `0.1.20260309` / MoonBit `v0.8.3` 時点では、dependency 側の native hook は consumer に自動伝播しません。そのため、consumer module 側にも小さい prebuild script を 1 つ置く必要があります。
+
+`moon.mod.json` に次を追加します。
+
+```json
+{
+  "--moonbit-unstable-prebuild": "scripts/mizchi-v8-consumer-prebuild.mjs"
+}
+```
+
+そして最終的に native binary を作る package に次を入れます。
+
+```moonbit
+options(
+  "is-main": true,
+  link: {
+    "native": {
+      "cc-link-flags": "${build.MIZCHI_V8_CC_LINK_FLAGS}",
+    },
+  },
+)
+```
+
+### 前提
+
+- `git`
+- `bash`
+- `cargo` を含む Rust toolchain
+- native C/C++ toolchain
+- consumer 側 prebuild script 用の `node`
+- GitHub、crates.io、`rusty_v8` release mirror へアクセスできるネットワーク
+
+公開 package 側でも `postadd` hook で bridge build は走りますが、いまのところ consumer 側の link 設定は別途必要です。
+
+### ソースから開発する
 
 ```bash
 git clone https://github.com/mizchi/v8.mbt
@@ -29,7 +72,7 @@ just bootstrap
 just test
 ```
 
-`just bootstrap` は `deps/rusty_v8` と Rust bridge をビルドし、MoonBit からリンクできる状態を作ります。
+`just bootstrap` は checkout 済みの repo 向けです。mooncakes から使う利用者は通常これを手で叩く必要はありません。
 
 ## 最小例
 
@@ -97,6 +140,8 @@ match @v8.runtime_new() {
 - 同時に 1 runtime のみ許可しています
 - async host callback surface は未実装です
 - Node / Deno 互換 API ではなく、embedder 向けの低レベル binding を狙っています
+- 現状は consumer 側に小さい module-level prebuild 設定が必要です
+- local path dependency は `moon add` 時の install hook と同じ挙動にはなりません
 
 ## ドキュメント
 
