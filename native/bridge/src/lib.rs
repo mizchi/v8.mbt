@@ -83,6 +83,25 @@ fn copy_string_to_moonbit(value: &str) -> MoonBitBytes {
     copy_bytes_to_moonbit(value.as_bytes())
 }
 
+#[allow(clippy::unnecessary_wraps)]
+fn unsupported_module_resolve_callback<'s>(
+    context: v8::Local<'s, v8::Context>,
+    specifier: v8::Local<'s, v8::String>,
+    _import_attributes: v8::Local<'s, v8::FixedArray>,
+    _referrer: v8::Local<'s, v8::Module>,
+) -> Option<v8::Local<'s, v8::Module>> {
+    v8::callback_scope!(unsafe scope, context);
+    v8::scope!(let scope, scope);
+
+    let specifier = specifier.to_rust_string_lossy(scope);
+    let message = format!("module imports are not supported yet: {specifier}");
+    let exception = v8::String::new(scope, &message)
+        .or_else(|| v8::String::new(scope, "module imports are not supported yet"))
+        .expect("failed to allocate module resolve exception");
+    scope.throw_exception(exception.into());
+    None
+}
+
 #[no_mangle]
 pub extern "C" fn moonbit_ptr_sizeof() -> i32 {
     std::mem::size_of::<*mut c_void>() as i32
@@ -419,6 +438,182 @@ pub extern "C" fn moonbit_v8_runtime_eval_async(
         set_error(
             error_out,
             "promise is still pending after 1024 microtask checkpoints",
+        );
+        empty_bytes()
+    }));
+
+    match result {
+        Ok(bytes) => bytes,
+        Err(payload) => {
+            set_error(error_out, &panic_message(payload));
+            empty_bytes()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn moonbit_v8_runtime_eval_module(
+    handle: u64,
+    source: *const u8,
+    source_len: i32,
+    error_out: *mut u8,
+) -> MoonBitBytes {
+    clear_error(error_out);
+
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        if handle == 0 {
+            set_error(error_out, "runtime handle is null");
+            return empty_bytes();
+        }
+        if source.is_null() || source_len < 0 {
+            set_error(error_out, "source buffer is invalid");
+            return empty_bytes();
+        }
+
+        let runtime = unsafe { &mut *(handle as usize as *mut Runtime) };
+        let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
+        let source = String::from_utf8_lossy(source);
+
+        v8::scope!(let scope, &mut runtime.isolate);
+        let context = v8::Local::new(scope, &runtime.context);
+        let context_scope = &mut v8::ContextScope::new(scope, context);
+        let mut try_catch = v8::TryCatch::new(context_scope);
+        let mut try_catch = {
+            let try_catch_pinned = unsafe { std::pin::Pin::new_unchecked(&mut try_catch) };
+            try_catch_pinned.init()
+        };
+        let try_catch = &mut try_catch;
+        macro_rules! format_exception {
+            ($try_catch:expr) => {{
+                let exception = $try_catch
+                    .stack_trace()
+                    .or_else(|| $try_catch.exception())
+                    .map(|value| value.to_rust_string_lossy($try_catch))
+                    .unwrap_or_else(|| "V8 exception".to_string());
+
+                if let Some(message) = $try_catch.message() {
+                    let line = message.get_line_number($try_catch).unwrap_or_default();
+                    if line > 0 {
+                        format!("line {}: {}", line, exception)
+                    } else {
+                        exception
+                    }
+                } else {
+                    exception
+                }
+            }};
+        }
+
+        let source = match v8::String::new(try_catch, source.as_ref()) {
+            Some(source) => source,
+            None => {
+                set_error(error_out, "failed to allocate V8 source string");
+                return empty_bytes();
+            }
+        };
+        let resource_name = match v8::String::new(try_catch, "moonbit:main.mjs") {
+            Some(resource_name) => resource_name,
+            None => {
+                set_error(error_out, "failed to allocate module resource name");
+                return empty_bytes();
+            }
+        };
+        let origin = v8::ScriptOrigin::new(
+            try_catch,
+            resource_name.into(),
+            0,
+            0,
+            false,
+            -1,
+            None,
+            false,
+            false,
+            true,
+            None,
+        );
+        let mut source = v8::script_compiler::Source::new(source, Some(&origin));
+
+        let module = match v8::script_compiler::compile_module(try_catch, &mut source) {
+            Some(module) => module,
+            None => {
+                set_error(error_out, &format_exception!(try_catch));
+                return empty_bytes();
+            }
+        };
+
+        match module.instantiate_module(try_catch, unsupported_module_resolve_callback) {
+            Some(true) => {}
+            Some(false) => {
+                set_error(error_out, "module instantiation did not complete");
+                return empty_bytes();
+            }
+            None => {
+                set_error(error_out, &format_exception!(try_catch));
+                return empty_bytes();
+            }
+        }
+
+        let value = match module.evaluate(try_catch) {
+            Some(value) => value,
+            None => {
+                set_error(error_out, &format_exception!(try_catch));
+                return empty_bytes();
+            }
+        };
+
+        if !value.is_promise() {
+            let value = match value.to_string(try_catch) {
+                Some(value) => value,
+                None => {
+                    set_error(error_out, &format_exception!(try_catch));
+                    return empty_bytes();
+                }
+            };
+            return copy_string_to_moonbit(&value.to_rust_string_lossy(try_catch));
+        }
+
+        let promise = match v8::Local::<v8::Promise>::try_from(value) {
+            Ok(promise) => promise,
+            Err(_) => {
+                set_error(error_out, "failed to cast module evaluation promise");
+                return empty_bytes();
+            }
+        };
+
+        for _ in 0..1024 {
+            match promise.state() {
+                v8::PromiseState::Pending => {
+                    try_catch.perform_microtask_checkpoint();
+                }
+                v8::PromiseState::Fulfilled => {
+                    let value = promise.result(try_catch);
+                    let value = match value.to_string(try_catch) {
+                        Some(value) => value,
+                        None => {
+                            set_error(
+                                error_out,
+                                "failed to stringify fulfilled module value",
+                            );
+                            return empty_bytes();
+                        }
+                    };
+                    return copy_string_to_moonbit(&value.to_rust_string_lossy(try_catch));
+                }
+                v8::PromiseState::Rejected => {
+                    let reason = promise.result(try_catch);
+                    let reason = reason
+                        .to_string(try_catch)
+                        .map(|value| value.to_rust_string_lossy(try_catch))
+                        .unwrap_or_else(|| "Module evaluation rejected".to_string());
+                    set_error(error_out, &reason);
+                    return empty_bytes();
+                }
+            }
+        }
+
+        set_error(
+            error_out,
+            "module evaluation promise is still pending after 1024 microtask checkpoints",
         );
         empty_bytes()
     }));

@@ -60,3 +60,35 @@ test "microtask checkpoint drains scheduled jobs" {
   })
   inspect(result, content="Ok(\"42\")")
 }
+
+///|
+test "module evaluation runs top-level code" {
+  let result = with_runtime(fn(runtime) {
+    let evaluated = runtime.eval_module_string(
+      "globalThis.__module_value = 6 * 7; export default globalThis.__module_value",
+    )
+    guard evaluated is Ok(_) else { return Err(evaluated.unwrap_err()) }
+    runtime.eval_string("globalThis.__module_value")
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "module imports are not supported yet" {
+  inspect(
+    is_err(eval_module_string("import 'dep'; export default 1")),
+    content="true",
+  )
+}
+
+///|
+test "module evaluation resolves top-level await" {
+  let result = with_runtime(fn(runtime) {
+    let evaluated = runtime.eval_module_string(
+      "globalThis.__module_async = 0; await Promise.resolve().then(() => { globalThis.__module_async = 42 })",
+    )
+    guard evaluated is Ok(_) else { return Err(evaluated.unwrap_err()) }
+    runtime.eval_string("globalThis.__module_async")
+  })
+  inspect(result, content="Ok(\"42\")")
+}

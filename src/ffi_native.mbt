@@ -32,3 +32,12 @@ extern "C" fn runtime_eval_async_native(
   source_len : Int,
   error_out : Bytes,
 ) -> Bytes = "moonbit_v8_runtime_eval_async"
+
+///|
+#borrow(source, error_out)
+extern "C" fn runtime_eval_module_native(
+  handle : UInt64,
+  source : Bytes,
+  source_len : Int,
+  error_out : Bytes,
+) -> Bytes = "moonbit_v8_runtime_eval_module"
