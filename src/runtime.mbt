@@ -82,6 +82,61 @@ pub fn Runtime::eval_string(
 }
 
 ///|
+pub fn Runtime::perform_microtask_checkpoint(
+  self : Runtime,
+) -> Result[Unit, V8Error] {
+  let handle = self.state.val.handle
+  if handle == 0 {
+    return Err(V8Error::RuntimeClosed)
+  }
+  let err_ptr = make_ptr_buffer()
+  native_ptr_clear(err_ptr)
+  runtime_perform_microtask_checkpoint_native(handle, err_ptr)
+  if not(native_ptr_is_null(err_ptr)) {
+    Err(
+      take_native_error(
+        err_ptr,
+        V8Error::NativeError(
+          "runtime_perform_microtask_checkpoint_native failed",
+        ),
+      ),
+    )
+  } else {
+    Ok(())
+  }
+}
+
+///|
+pub fn Runtime::eval_async_string(
+  self : Runtime,
+  source : String,
+) -> Result[String, V8Error] {
+  let handle = self.state.val.handle
+  if handle == 0 {
+    return Err(V8Error::RuntimeClosed)
+  }
+  let err_ptr = make_ptr_buffer()
+  native_ptr_clear(err_ptr)
+  let source_bytes = @utf8.encode(source)
+  let result_bytes = runtime_eval_async_native(
+    handle,
+    source_bytes,
+    source_bytes.length(),
+    err_ptr,
+  )
+  if not(native_ptr_is_null(err_ptr)) {
+    Err(
+      take_native_error(
+        err_ptr,
+        V8Error::NativeError("runtime_eval_async_native failed"),
+      ),
+    )
+  } else {
+    Ok(@utf8.decode_lossy(result_bytes))
+  }
+}
+
+///|
 pub fn[T] with_runtime(
   f : (Runtime) -> Result[T, V8Error],
 ) -> Result[T, V8Error] {
@@ -98,4 +153,9 @@ pub fn[T] with_runtime(
 ///|
 pub fn eval_string(source : String) -> Result[String, V8Error] {
   with_runtime(fn(runtime) { runtime.eval_string(source) })
+}
+
+///|
+pub fn eval_async_string(source : String) -> Result[String, V8Error] {
+  with_runtime(fn(runtime) { runtime.eval_async_string(source) })
 }

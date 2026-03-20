@@ -140,6 +140,7 @@ pub extern "C" fn moonbit_v8_runtime_new(error_out: *mut u8) -> u64 {
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
         ensure_v8();
         let mut isolate = v8::Isolate::new(v8::CreateParams::default());
+        isolate.set_microtasks_policy(v8::MicrotasksPolicy::Explicit);
         let context = {
             v8::scope!(let scope, &mut isolate);
             let context = v8::Context::new(scope, Default::default());
@@ -258,6 +259,168 @@ pub extern "C" fn moonbit_v8_runtime_eval(
         };
 
         copy_string_to_moonbit(&value.to_rust_string_lossy(try_catch))
+    }));
+
+    match result {
+        Ok(bytes) => bytes,
+        Err(payload) => {
+            set_error(error_out, &panic_message(payload));
+            empty_bytes()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn moonbit_v8_runtime_perform_microtask_checkpoint(handle: u64, error_out: *mut u8) {
+    clear_error(error_out);
+
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        if handle == 0 {
+            set_error(error_out, "runtime handle is null");
+            return;
+        }
+
+        let runtime = unsafe { &mut *(handle as usize as *mut Runtime) };
+        v8::scope!(let scope, &mut runtime.isolate);
+        let context = v8::Local::new(scope, &runtime.context);
+        let scope = &mut v8::ContextScope::new(scope, context);
+        scope.perform_microtask_checkpoint();
+    }));
+
+    if let Err(payload) = result {
+        set_error(error_out, &panic_message(payload));
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn moonbit_v8_runtime_eval_async(
+    handle: u64,
+    source: *const u8,
+    source_len: i32,
+    error_out: *mut u8,
+) -> MoonBitBytes {
+    clear_error(error_out);
+
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        if handle == 0 {
+            set_error(error_out, "runtime handle is null");
+            return empty_bytes();
+        }
+        if source.is_null() || source_len < 0 {
+            set_error(error_out, "source buffer is invalid");
+            return empty_bytes();
+        }
+
+        let runtime = unsafe { &mut *(handle as usize as *mut Runtime) };
+        let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
+        let source = String::from_utf8_lossy(source);
+
+        v8::scope!(let scope, &mut runtime.isolate);
+        let context = v8::Local::new(scope, &runtime.context);
+        let context_scope = &mut v8::ContextScope::new(scope, context);
+        let mut try_catch = v8::TryCatch::new(context_scope);
+        let mut try_catch = {
+            let try_catch_pinned = unsafe { std::pin::Pin::new_unchecked(&mut try_catch) };
+            try_catch_pinned.init()
+        };
+        let try_catch = &mut try_catch;
+        macro_rules! format_exception {
+            ($try_catch:expr) => {{
+                let exception = $try_catch
+                    .stack_trace()
+                    .or_else(|| $try_catch.exception())
+                    .map(|value| value.to_rust_string_lossy($try_catch))
+                    .unwrap_or_else(|| "V8 exception".to_string());
+
+                if let Some(message) = $try_catch.message() {
+                    let line = message.get_line_number($try_catch).unwrap_or_default();
+                    if line > 0 {
+                        format!("line {}: {}", line, exception)
+                    } else {
+                        exception
+                    }
+                } else {
+                    exception
+                }
+            }};
+        }
+
+        let source = match v8::String::new(try_catch, source.as_ref()) {
+            Some(source) => source,
+            None => {
+                set_error(error_out, "failed to allocate V8 source string");
+                return empty_bytes();
+            }
+        };
+
+        let script = match v8::Script::compile(try_catch, source, None) {
+            Some(script) => script,
+            None => {
+                set_error(error_out, &format_exception!(try_catch));
+                return empty_bytes();
+            }
+        };
+
+        let value = match script.run(try_catch) {
+            Some(value) => value,
+            None => {
+                set_error(error_out, &format_exception!(try_catch));
+                return empty_bytes();
+            }
+        };
+
+        if !value.is_promise() {
+            let value = match value.to_string(try_catch) {
+                Some(value) => value,
+                None => {
+                    set_error(error_out, &format_exception!(try_catch));
+                    return empty_bytes();
+                }
+            };
+            return copy_string_to_moonbit(&value.to_rust_string_lossy(try_catch));
+        }
+
+        let promise = match v8::Local::<v8::Promise>::try_from(value) {
+            Ok(promise) => promise,
+            Err(_) => {
+                set_error(error_out, "failed to cast promise result");
+                return empty_bytes();
+            }
+        };
+
+        for _ in 0..1024 {
+            match promise.state() {
+                v8::PromiseState::Pending => {
+                    try_catch.perform_microtask_checkpoint();
+                }
+                v8::PromiseState::Fulfilled => {
+                    let value = promise.result(try_catch);
+                    let value = match value.to_string(try_catch) {
+                        Some(value) => value,
+                        None => {
+                            set_error(error_out, "failed to stringify fulfilled promise value");
+                            return empty_bytes();
+                        }
+                    };
+                    return copy_string_to_moonbit(&value.to_rust_string_lossy(try_catch));
+                }
+                v8::PromiseState::Rejected => {
+                    let reason = promise.result(try_catch);
+                    let reason = reason
+                        .to_string(try_catch)
+                        .map(|value| value.to_rust_string_lossy(try_catch))
+                        .unwrap_or_else(|| "Promise rejected".to_string());
+                    set_error(error_out, &reason);
+                    return empty_bytes();
+                }
+            }
+        }
+
+        set_error(
+            error_out,
+            "promise is still pending after 1024 microtask checkpoints",
+        );
+        empty_bytes()
     }));
 
     match result {

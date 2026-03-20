@@ -2,6 +2,8 @@
 package "mizchi/v8"
 
 // Values
+pub fn eval_async_string(String) -> Result[String, V8Error]
+
 pub fn eval_string(String) -> Result[String, V8Error]
 
 pub fn runtime_new() -> Result[Runtime, V8Error]
@@ -24,8 +26,10 @@ pub struct Runtime {
   // private fields
 }
 pub fn Runtime::dispose(Self) -> Unit
+pub fn Runtime::eval_async_string(Self, String) -> Result[String, V8Error]
 pub fn Runtime::eval_string(Self, String) -> Result[String, V8Error]
 pub fn Runtime::is_closed(Self) -> Bool
+pub fn Runtime::perform_microtask_checkpoint(Self) -> Result[Unit, V8Error]
 
 type RuntimeState
 

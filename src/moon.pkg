@@ -10,8 +10,8 @@ options(
   },
   "pre-build": [
     {
-      "command": "bash $input $output",
-      "input": "scripts/build-rusty-v8.sh",
+      "command": "bash src/scripts/build-rusty-v8.sh $output",
+      "input": "../native/bridge/src/lib.rs",
       "output": "build-stamps/rusty_v8_build.stamp",
     },
   ],
