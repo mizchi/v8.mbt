@@ -7,8 +7,707 @@ fn[T] is_err(result : Result[T, V8Error]) -> Bool {
 }
 
 ///|
+fn promise_state_name(state : PromiseState) -> String {
+  match state {
+    PromiseState::Pending => "Pending"
+    PromiseState::Fulfilled => "Fulfilled"
+    PromiseState::Rejected => "Rejected"
+  }
+}
+
+///|
 test "version is exposed" {
   inspect(version().length() > 0, content="true")
+}
+
+///|
+test "runtime can start from snapshot" {
+  let result = match snapshot_create("globalThis.answer = 41;") {
+    Ok(snapshot) =>
+      with_runtime_with_snapshot(snapshot, fn(runtime) {
+        runtime.eval_string("globalThis.answer + 1")
+      })
+    Err(err) => Err(err)
+  }
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "snapshot can be extended from existing snapshot" {
+  let result = match snapshot_create("globalThis.base = 40;") {
+    Ok(snapshot) =>
+      match
+        snapshot_extend(snapshot, "globalThis.answer = globalThis.base + 2;") {
+        Ok(extended) =>
+          with_runtime_with_snapshot(extended, fn(runtime) {
+            runtime.eval_string("globalThis.answer")
+          })
+        Err(err) => Err(err)
+      }
+    Err(err) => Err(err)
+  }
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "invalid snapshot surfaces as err" {
+  inspect(
+    is_err(runtime_new_with_snapshot(@utf8.encode("not a snapshot"))),
+    content="true",
+  )
+}
+
+///|
+test "runtime builder preloads modules before build" {
+  let builder = runtime_builder_new().load_module(
+    "dep", "export const answer = 41;",
+  )
+  let result = builder.with_runtime(fn(runtime) {
+    runtime.eval_async_string(
+      "(async () => { let mod = await import('dep'); return mod.answer + 1 })()",
+    )
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "runtime can set and get global json" {
+  let result = with_runtime(fn(runtime) {
+    let set = runtime.set_global_json(
+      "config", "{\"answer\":42,\"items\":[1,2]}",
+    )
+    guard set is Ok(_) else { return Err(set.unwrap_err()) }
+    runtime.get_global_json("config")
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42,\\\"items\\\":[1,2]}\")")
+}
+
+///|
+test "runtime can call global function with json args" {
+  let result = with_runtime(fn(runtime) {
+    let prepared = runtime.eval_string(
+      "globalThis.add = (a, b) => ({ answer: a + b })",
+    )
+    guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+    runtime.call_global_json("add", "[20,22]")
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}\")")
+}
+
+///|
+test "runtime can call async global function with json args" {
+  let result = with_runtime(fn(runtime) {
+    let prepared = runtime.eval_string(
+      "globalThis.load = async (base) => ({ answer: base + 2 })",
+    )
+    guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+    runtime.call_global_json("load", "[40]")
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}\")")
+}
+
+///|
+test "runtime can set and get global bytes" {
+  let result = with_runtime(fn(runtime) {
+    let set = runtime.set_global_bytes("buf", @utf8.encode("ABC"))
+    guard set is Ok(_) else { return Err(set.unwrap_err()) }
+    let got = runtime.get_global_bytes("buf")
+    guard got is Ok(_) else { return Err(got.unwrap_err()) }
+    Ok(@utf8.decode_lossy(got.unwrap()))
+  })
+  inspect(result, content="Ok(\"ABC\")")
+}
+
+///|
+test "runtime can call global function with bytes" {
+  let result = with_runtime(fn(runtime) {
+    let prepared = runtime.eval_string(
+      "globalThis.reverse_buf = (buf) => new Uint8Array([buf[2], buf[1], buf[0]])",
+    )
+    guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+    let called = runtime.call_global_bytes("reverse_buf", @utf8.encode("ABC"))
+    guard called is Ok(_) else { return Err(called.unwrap_err()) }
+    Ok(@utf8.decode_lossy(called.unwrap()))
+  })
+  inspect(result, content="Ok(\"CBA\")")
+}
+
+///|
+test "runtime can call async global function with bytes" {
+  let result = with_runtime(fn(runtime) {
+    let prepared = runtime.eval_string(
+      "globalThis.decorate_buf = async (buf) => new Uint8Array([buf[0], buf[1], 33]).buffer",
+    )
+    guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+    let called = runtime.call_global_bytes("decorate_buf", @utf8.encode("AB"))
+    guard called is Ok(_) else { return Err(called.unwrap_err()) }
+    Ok(@utf8.decode_lossy(called.unwrap()))
+  })
+  inspect(result, content="Ok(\"AB!\")")
+}
+
+///|
+test "runtime async json op queue is empty by default" {
+  let result = with_runtime(fn(runtime) {
+    let op = runtime.take_async_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    match op.unwrap() {
+      None => Ok(true)
+      Some(_) => Ok(false)
+    }
+  })
+  inspect(result, content="Ok(true)")
+}
+
+///|
+test "runtime can resolve async json op from host" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_async_json_op("add")
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let promise = runtime.eval_promise_string(
+      "MoonBit.opAsync('add', [20, 22])",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let op = runtime.take_async_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    let resolved = runtime.resolve_async_json_op(op.id, "{\"answer\":42}")
+    guard resolved is Ok(_) else { return Err(resolved.unwrap_err()) }
+    let value = promise.unwrap().await_json()
+    guard value is Ok(_) else { return Err(value.unwrap_err()) }
+    Ok(op.name + ":" + op.payload_json + ":" + value.unwrap())
+  })
+  inspect(result, content="Ok(\"add:[20,22]:{\\\"answer\\\":42}\")")
+}
+
+///|
+test "runtime can reject async json op from host" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_async_json_op("fail")
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let promise = runtime.eval_promise_string(
+      "MoonBit.opAsync('fail', { answer: 40 })",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let op = runtime.take_async_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    let rejected = runtime.reject_async_json_op(op.id, "boom")
+    guard rejected is Ok(_) else { return Err(rejected.unwrap_err()) }
+    Ok(
+      op.name +
+      ":" +
+      op.payload_json +
+      ":" +
+      is_err(promise.unwrap().await_json()).to_string(),
+    )
+  })
+  inspect(result, content="Ok(\"fail:{\\\"answer\\\":40}:true\")")
+}
+
+///|
+test "unknown async json op rejects without queueing" {
+  let result = with_runtime(fn(runtime) {
+    let promise = runtime.eval_promise_string(
+      "MoonBit.opAsync('missing', { answer: 1 })",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let op = runtime.take_async_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let queued = match op.unwrap() {
+      None => "none"
+      Some(request) => request.name
+    }
+    Ok(queued + ":" + is_err(promise.unwrap().await_json()).to_string())
+  })
+  inspect(result, content="Ok(\"none:true\")")
+}
+
+///|
+test "runtime async bytes op queue is empty by default" {
+  let result = with_runtime(fn(runtime) {
+    let op = runtime.take_async_bytes_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    match op.unwrap() {
+      None => Ok(true)
+      Some(_) => Ok(false)
+    }
+  })
+  inspect(result, content="Ok(true)")
+}
+
+///|
+test "runtime can resolve async bytes op from host" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_async_bytes_op("reverse")
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let promise = runtime.eval_promise_string(
+      "MoonBit.opAsyncBytes('reverse', new Uint8Array([65, 66, 67]))",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let op = runtime.take_async_bytes_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    let resolved = runtime.resolve_async_bytes_op(op.id, @utf8.encode("CBA"))
+    guard resolved is Ok(_) else { return Err(resolved.unwrap_err()) }
+    let value = promise.unwrap().await_bytes()
+    guard value is Ok(_) else { return Err(value.unwrap_err()) }
+    Ok(
+      op.name +
+      ":" +
+      @utf8.decode_lossy(op.payload) +
+      ":" +
+      @utf8.decode_lossy(value.unwrap()),
+    )
+  })
+  inspect(result, content="Ok(\"reverse:ABC:CBA\")")
+}
+
+///|
+test "runtime can reject async bytes op from host" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_async_bytes_op("fail_bytes")
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let promise = runtime.eval_promise_string(
+      "MoonBit.opAsyncBytes('fail_bytes', new Uint8Array([65, 66]))",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let op = runtime.take_async_bytes_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    let rejected = runtime.reject_async_bytes_op(op.id, "boom")
+    guard rejected is Ok(_) else { return Err(rejected.unwrap_err()) }
+    Ok(
+      op.name +
+      ":" +
+      @utf8.decode_lossy(op.payload) +
+      ":" +
+      is_err(promise.unwrap().await_bytes()).to_string(),
+    )
+  })
+  inspect(result, content="Ok(\"fail_bytes:AB:true\")")
+}
+
+///|
+test "unknown async bytes op rejects without queueing" {
+  let result = with_runtime(fn(runtime) {
+    let promise = runtime.eval_promise_string(
+      "MoonBit.opAsyncBytes('missing_bytes', new Uint8Array([65]))",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let op = runtime.take_async_bytes_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let queued = match op.unwrap() {
+      None => "none"
+      Some(request) => request.name
+    }
+    Ok(queued + ":" + is_err(promise.unwrap().await_bytes()).to_string())
+  })
+  inspect(result, content="Ok(\"none:true\")")
+}
+
+///|
+test "runtime sync json op queue is empty by default" {
+  let result = with_runtime(fn(runtime) {
+    let op = runtime.take_sync_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    match op.unwrap() {
+      None => Ok(true)
+      Some(_) => Ok(false)
+    }
+  })
+  inspect(result, content="Ok(true)")
+}
+
+///|
+test "runtime can resolve sync json op from preloaded response" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_sync_json_op("add")
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let prepared = runtime.push_sync_json_op_response(
+      "add", "[20,22]", "{\"answer\":42}",
+    )
+    guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+    let value = runtime.eval_json("MoonBit.opSync('add', [20, 22])")
+    guard value is Ok(_) else { return Err(value.unwrap_err()) }
+    let op = runtime.take_sync_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    Ok(value.unwrap() + ":" + op.name + ":" + op.payload_json)
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}:add:[20,22]\")")
+}
+
+///|
+test "runtime can resolve sync json op from callback" {
+  let result = with_runtime(fn(runtime) {
+    let base = 40
+    let registered = runtime.register_sync_json_callback("add", fn(payload) {
+      if payload == "[20,22]" {
+        "{\"answer\":" + (base + 2).to_string() + "}"
+      } else {
+        "{\"answer\":0}"
+      }
+    })
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let value = runtime.eval_json("MoonBit.opSync('add', [20, 22])")
+    guard value is Ok(_) else { return Err(value.unwrap_err()) }
+    let op = runtime.take_sync_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    Ok(value.unwrap() + ":" + op.name + ":" + op.payload_json)
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}:add:[20,22]\")")
+}
+
+///|
+test "unknown sync json op throws without queueing" {
+  let result = with_runtime(fn(runtime) {
+    let value = runtime.eval_json("MoonBit.opSync('missing', { answer: 1 })")
+    let op = runtime.take_sync_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let queued = match op.unwrap() {
+      None => "none"
+      Some(request) => request.name
+    }
+    Ok(queued + ":" + is_err(value).to_string())
+  })
+  inspect(result, content="Ok(\"none:true\")")
+}
+
+///|
+test "missing sync json response still records request" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_sync_json_op("missing_response")
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let value = runtime.eval_json(
+      "MoonBit.opSync('missing_response', { answer: 1 })",
+    )
+    let op = runtime.take_sync_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    Ok(op.name + ":" + op.payload_json + ":" + is_err(value).to_string())
+  })
+  inspect(result, content="Ok(\"missing_response:{\\\"answer\\\":1}:true\")")
+}
+
+///|
+test "runtime sync bytes op queue is empty by default" {
+  let result = with_runtime(fn(runtime) {
+    let op = runtime.take_sync_bytes_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    match op.unwrap() {
+      None => Ok(true)
+      Some(_) => Ok(false)
+    }
+  })
+  inspect(result, content="Ok(true)")
+}
+
+///|
+test "runtime can resolve sync bytes op from preloaded response" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_sync_bytes_op("reverse")
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let prepared = runtime.push_sync_bytes_op_response(
+      "reverse",
+      @utf8.encode("ABC"),
+      @utf8.encode("CBA"),
+    )
+    guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+    let value = runtime.eval_bytes(
+      "MoonBit.opSyncBytes('reverse', new Uint8Array([65, 66, 67]))",
+    )
+    guard value is Ok(_) else { return Err(value.unwrap_err()) }
+    let op = runtime.take_sync_bytes_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    Ok(
+      @utf8.decode_lossy(value.unwrap()) +
+      ":" +
+      op.name +
+      ":" +
+      @utf8.decode_lossy(op.payload),
+    )
+  })
+  inspect(result, content="Ok(\"CBA:reverse:ABC\")")
+}
+
+///|
+test "runtime can resolve sync bytes op from callback" {
+  let result = with_runtime(fn(runtime) {
+    let suffix = @utf8.encode("!")
+    let registered = runtime.register_sync_bytes_callback("decorate", fn(
+      payload,
+    ) {
+      @utf8.encode(@utf8.decode_lossy(payload) + @utf8.decode_lossy(suffix))
+    })
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let value = runtime.eval_bytes(
+      "MoonBit.opSyncBytes('decorate', new Uint8Array([65, 66]))",
+    )
+    guard value is Ok(_) else { return Err(value.unwrap_err()) }
+    let op = runtime.take_sync_bytes_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    Ok(
+      @utf8.decode_lossy(value.unwrap()) +
+      ":" +
+      op.name +
+      ":" +
+      @utf8.decode_lossy(op.payload),
+    )
+  })
+  inspect(result, content="Ok(\"AB!:decorate:AB\")")
+}
+
+///|
+test "unknown sync bytes op throws without queueing" {
+  let result = with_runtime(fn(runtime) {
+    let value = runtime.eval_bytes(
+      "MoonBit.opSyncBytes('missing_bytes', new Uint8Array([65]))",
+    )
+    let op = runtime.take_sync_bytes_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let queued = match op.unwrap() {
+      None => "none"
+      Some(request) => request.name
+    }
+    Ok(queued + ":" + is_err(value).to_string())
+  })
+  inspect(result, content="Ok(\"none:true\")")
+}
+
+///|
+test "missing sync bytes response still records request" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_sync_bytes_op("missing_bytes_response")
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let value = runtime.eval_bytes(
+      "MoonBit.opSyncBytes('missing_bytes_response', new Uint8Array([65, 66]))",
+    )
+    let op = runtime.take_sync_bytes_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    Ok(
+      op.name +
+      ":" +
+      @utf8.decode_lossy(op.payload) +
+      ":" +
+      is_err(value).to_string(),
+    )
+  })
+  inspect(result, content="Ok(\"missing_bytes_response:AB:true\")")
+}
+
+///|
+test "runtime can eval json result" {
+  let result = with_runtime(fn(runtime) {
+    runtime.eval_json("({ answer: 42, ok: true })")
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42,\\\"ok\\\":true}\")")
+}
+
+///|
+test "runtime can eval async json result" {
+  let result = with_runtime(fn(runtime) {
+    runtime.eval_async_json("(async () => ({ answer: 42, ok: true }))()")
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42,\\\"ok\\\":true}\")")
+}
+
+///|
+test "runtime can eval bytes result" {
+  let result = with_runtime(fn(runtime) {
+    let bytes = runtime.eval_bytes("new Uint8Array([65, 66, 67])")
+    guard bytes is Ok(_) else { return Err(bytes.unwrap_err()) }
+    Ok(@utf8.decode_lossy(bytes.unwrap()))
+  })
+  inspect(result, content="Ok(\"ABC\")")
+}
+
+///|
+test "runtime can eval async bytes result" {
+  let result = with_runtime(fn(runtime) {
+    let bytes = runtime.eval_async_bytes(
+      "(async () => new Uint8Array([65, 66, 67]).buffer)()",
+    )
+    guard bytes is Ok(_) else { return Err(bytes.unwrap_err()) }
+    Ok(@utf8.decode_lossy(bytes.unwrap()))
+  })
+  inspect(result, content="Ok(\"ABC\")")
+}
+
+///|
+test "runtime can eval named async json with relative dynamic import" {
+  let result = with_runtime(fn(runtime) {
+    let dep = runtime.load_module(
+      "file:///feature/dep.mjs", "export const answer = 42;",
+    )
+    guard dep is Ok(_) else { return Err(dep.unwrap_err()) }
+    runtime.eval_async_json_with_name(
+      "file:///feature/bootstrap.js", "(async () => { let mod = await import('./dep.mjs'); return { answer: mod.answer } })()",
+    )
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}\")")
+}
+
+///|
+test "runtime builder combines snapshot and modules" {
+  let result = match snapshot_create("globalThis.base = 40;") {
+    Ok(snapshot) => {
+      let builder = runtime_builder_new()
+        .with_snapshot(snapshot)
+        .load_module("dep", "export const answer = globalThis.base + 2;")
+      builder.with_runtime(fn(runtime) {
+        let evaluated = runtime.eval_module_string(
+          "import { answer } from 'dep'; globalThis.__builder_answer = answer",
+        )
+        guard evaluated is Ok(_) else { return Err(evaluated.unwrap_err()) }
+        runtime.eval_string("globalThis.__builder_answer")
+      })
+    }
+    Err(err) => Err(err)
+  }
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "runtime builder evaluates snapshot init before loading modules" {
+  let result = runtime_builder_new()
+    .eval_snapshot("globalThis.base = 40;")
+    .load_module("dep", "export const answer = globalThis.base + 2;")
+    .with_runtime(fn(runtime) {
+      let evaluated = runtime.eval_module_string(
+        "import { answer } from 'dep'; globalThis.__builder_snapshot_answer = answer",
+      )
+      guard evaluated is Ok(_) else { return Err(evaluated.unwrap_err()) }
+      runtime.eval_string("globalThis.__builder_snapshot_answer")
+    })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "runtime builder consumes snapshot builder state" {
+  let snapshot_builder = snapshot_builder_new()
+    .eval("globalThis.base = 40;")
+    .eval("globalThis.bump = 1;")
+  let result = runtime_builder_new()
+    .with_snapshot_builder(snapshot_builder)
+    .load_module(
+      "dep", "export const answer = globalThis.base + globalThis.bump + 1;",
+    )
+    .with_runtime(fn(runtime) {
+      let evaluated = runtime.eval_module_string(
+        "import { answer } from 'dep'; globalThis.__builder_snapshot_builder_answer = answer",
+      )
+      guard evaluated is Ok(_) else { return Err(evaluated.unwrap_err()) }
+      runtime.eval_string("globalThis.__builder_snapshot_builder_answer")
+    })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "runtime builder builds reusable runtime image" {
+  let result = match
+    runtime_builder_new()
+    .eval_snapshot("globalThis.base = 40;")
+    .load_module("dep", "export const answer = globalThis.base + 2;")
+    .build_image() {
+    Ok(image) => {
+      let first = image.with_runtime(fn(runtime) {
+        let evaluated = runtime.eval_module_string(
+          "import { answer } from 'dep'; globalThis.__image_answer = answer",
+        )
+        guard evaluated is Ok(_) else { return Err(evaluated.unwrap_err()) }
+        runtime.eval_string("globalThis.__image_answer")
+      })
+      guard first is Ok(_) else { Err(first.unwrap_err()) }
+      let second = image.with_runtime(fn(runtime) {
+        runtime.eval_string("globalThis.base + 2")
+      })
+      guard second is Ok(_) else { Err(second.unwrap_err()) }
+      Ok(first.unwrap() + ":" + second.unwrap())
+    }
+    Err(err) => Err(err)
+  }
+  inspect(result, content="Ok(\"42:42\")")
+}
+
+///|
+test "snapshot builder builds runtime image that can preload modules later" {
+  let result = match
+    snapshot_builder_new().eval("globalThis.base = 40;").build_image() {
+    Ok(image) => {
+      let image = image.load_module(
+        "dep", "export const answer = globalThis.base + 2;",
+      )
+      image.with_runtime(fn(runtime) {
+        let evaluated = runtime.eval_module_string(
+          "import { answer } from 'dep'; globalThis.__snapshot_image_answer = answer",
+        )
+        guard evaluated is Ok(_) else { return Err(evaluated.unwrap_err()) }
+        runtime.eval_string("globalThis.__snapshot_image_answer")
+      })
+    }
+    Err(err) => Err(err)
+  }
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "snapshot builder combines multiple init scripts" {
+  let result = snapshot_builder_new()
+    .eval("globalThis.base = 40;")
+    .eval("globalThis.answer = globalThis.base + 2;")
+    .with_runtime(fn(runtime) { runtime.eval_string("globalThis.answer") })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "snapshot builder extends existing snapshot" {
+  let result = match snapshot_create("globalThis.base = 40;") {
+    Ok(snapshot) => {
+      let builder = snapshot_builder_new()
+        .with_snapshot(snapshot)
+        .eval("globalThis.answer = globalThis.base + 2;")
+      builder.with_runtime(fn(runtime) {
+        runtime.eval_string("globalThis.answer")
+      })
+    }
+    Err(err) => Err(err)
+  }
+  inspect(result, content="Ok(\"42\")")
 }
 
 ///|
@@ -40,11 +739,37 @@ test "eval async string resolves promise" {
 }
 
 ///|
+test "named async script resolves relative dynamic import" {
+  let result = with_runtime(fn(runtime) {
+    let dep = runtime.load_module(
+      "file:///feature/dep.mjs", "export const answer = 42;",
+    )
+    guard dep is Ok(_) else { return Err(dep.unwrap_err()) }
+    runtime.eval_async_string_with_name(
+      "file:///feature/bootstrap.js", "(async () => { let mod = await import('./dep.mjs'); return mod.answer })()",
+    )
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
 test "rejected promise surfaces as err" {
   inspect(
     is_err(eval_async_string("Promise.reject(new Error('boom'))")),
     content="true",
   )
+}
+
+///|
+test "dynamic import resolves preloaded module in async script" {
+  let result = with_runtime(fn(runtime) {
+    let loaded = runtime.load_module("dep", "export const answer = 41;")
+    guard loaded is Ok(_) else { return Err(loaded.unwrap_err()) }
+    runtime.eval_async_string(
+      "(async () => { let mod = await import('dep'); return mod.answer + 1 })()",
+    )
+  })
+  inspect(result, content="Ok(\"42\")")
 }
 
 ///|
@@ -62,6 +787,142 @@ test "microtask checkpoint drains scheduled jobs" {
 }
 
 ///|
+test "runtime can observe pending promise state and result" {
+  let result = with_runtime(fn(runtime) {
+    let prepared = runtime.eval_string(
+      "globalThis.__resolve_later = null; globalThis.__tracked_promise = new Promise((resolve) => { globalThis.__resolve_later = resolve })",
+    )
+    guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+    let promise = runtime.eval_promise_string("globalThis.__tracked_promise")
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let promise = promise.unwrap()
+    let initial_state = promise.state()
+    guard initial_state is Ok(_) else { return Err(initial_state.unwrap_err()) }
+    let resolved = runtime.eval_string("globalThis.__resolve_later(42); 'ok'")
+    guard resolved is Ok(_) else { return Err(resolved.unwrap_err()) }
+    let flushed = runtime.perform_microtask_checkpoint()
+    guard flushed is Ok(_) else { return Err(flushed.unwrap_err()) }
+    let settled_state = promise.state()
+    guard settled_state is Ok(_) else { return Err(settled_state.unwrap_err()) }
+    let settled_value = promise.result_string()
+    guard settled_value is Ok(_) else { return Err(settled_value.unwrap_err()) }
+    Ok(
+      promise_state_name(initial_state.unwrap()) +
+      ":" +
+      promise_state_name(settled_state.unwrap()) +
+      ":" +
+      settled_value.unwrap(),
+    )
+  })
+  inspect(result, content="Ok(\"Pending:Fulfilled:42\")")
+}
+
+///|
+test "runtime can observe named promise script with relative dynamic import" {
+  let result = with_runtime(fn(runtime) {
+    let loaded = runtime.load_module(
+      "file:///feature/dep.mjs", "export const answer = 42;",
+    )
+    guard loaded is Ok(_) else { return Err(loaded.unwrap_err()) }
+    let promise = runtime.eval_promise_string_with_name(
+      "file:///feature/bootstrap.js", "(async () => { let mod = await import('./dep.mjs'); return mod.answer })()",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let promise = promise.unwrap()
+    let flushed = runtime.perform_microtask_checkpoint()
+    guard flushed is Ok(_) else { return Err(flushed.unwrap_err()) }
+    promise.result_string()
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "disposing promise handle surfaces as err" {
+  let result = with_runtime(fn(runtime) {
+    let promise = runtime.eval_promise_string("Promise.resolve(42)")
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let promise = promise.unwrap()
+    promise.dispose()
+    Ok(is_err(promise.state()))
+  })
+  inspect(result, content="Ok(true)")
+}
+
+///|
+test "promise handle can read fulfilled json result" {
+  let result = with_runtime(fn(runtime) {
+    let promise = runtime.eval_promise_string(
+      "(async () => ({ answer: 42, ok: true }))()",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let promise = promise.unwrap()
+    let flushed = runtime.perform_microtask_checkpoint()
+    guard flushed is Ok(_) else { return Err(flushed.unwrap_err()) }
+    promise.result_json()
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42,\\\"ok\\\":true}\")")
+}
+
+///|
+test "promise handle can read fulfilled bytes result" {
+  let result = with_runtime(fn(runtime) {
+    let promise = runtime.eval_promise_string(
+      "(async () => new Uint8Array([65, 66, 67]).buffer)()",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let promise = promise.unwrap()
+    let flushed = runtime.perform_microtask_checkpoint()
+    guard flushed is Ok(_) else { return Err(flushed.unwrap_err()) }
+    let bytes = promise.result_bytes()
+    guard bytes is Ok(_) else { return Err(bytes.unwrap_err()) }
+    Ok(@utf8.decode_lossy(bytes.unwrap()))
+  })
+  inspect(result, content="Ok(\"ABC\")")
+}
+
+///|
+test "promise handle can await json result" {
+  let result = with_runtime(fn(runtime) {
+    let promise = runtime.eval_promise_string(
+      "(async () => ({ answer: 42, ok: true }))()",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    promise.unwrap().await_json()
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42,\\\"ok\\\":true}\")")
+}
+
+///|
+test "promise handle can await bytes result" {
+  let result = with_runtime(fn(runtime) {
+    let promise = runtime.eval_promise_string(
+      "(async () => new Uint8Array([65, 66, 67]).buffer)()",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let bytes = promise.unwrap().await_bytes()
+    guard bytes is Ok(_) else { return Err(bytes.unwrap_err()) }
+    Ok(@utf8.decode_lossy(bytes.unwrap()))
+  })
+  inspect(result, content="Ok(\"ABC\")")
+}
+
+///|
+test "promise handle can await named promise script with relative dynamic import" {
+  let result = with_runtime(fn(runtime) {
+    let loaded = runtime.load_module(
+      "file:///feature/dep.mjs", "export const answer = 42;",
+    )
+    guard loaded is Ok(_) else { return Err(loaded.unwrap_err()) }
+    let promise = runtime.eval_promise_string_with_name(
+      "file:///feature/bootstrap.js", "(async () => { let mod = await import('./dep.mjs'); return mod.answer })()",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    promise.unwrap().await_string()
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
 test "module evaluation runs top-level code" {
   let result = with_runtime(fn(runtime) {
     let evaluated = runtime.eval_module_string(
@@ -74,7 +935,189 @@ test "module evaluation runs top-level code" {
 }
 
 ///|
-test "module imports are not supported yet" {
+test "runtime can inspect module json exports" {
+  let result = with_runtime(fn(runtime) {
+    let module_handle = runtime.eval_module_handle_string(
+      "export const answer = 42; export const nested = { ok: true }",
+    )
+    guard module_handle is Ok(_) else { return Err(module_handle.unwrap_err()) }
+    let module_handle = module_handle.unwrap()
+    let answer = module_handle.get_export_json("answer")
+    guard answer is Ok(_) else { return Err(answer.unwrap_err()) }
+    let nested = module_handle.get_export_json("nested")
+    guard nested is Ok(_) else { return Err(nested.unwrap_err()) }
+    Ok(answer.unwrap() + ":" + nested.unwrap())
+  })
+  inspect(result, content="Ok(\"42:{\\\"ok\\\":true}\")")
+}
+
+///|
+test "runtime can list module export names" {
+  let result = with_runtime(fn(runtime) {
+    let module_handle = runtime.eval_module_handle_string(
+      "export const answer = 42; export const nested = { ok: true }",
+    )
+    guard module_handle is Ok(_) else { return Err(module_handle.unwrap_err()) }
+    let names = module_handle.unwrap().export_names()
+    guard names is Ok(_) else { return Err(names.unwrap_err()) }
+    let names = names.unwrap()
+    Ok(names.length() == 2 && names[0] == "answer" && names[1] == "nested")
+  })
+  inspect(result, content="Ok(true)")
+}
+
+///|
+test "runtime can inspect named module exports with relative imports" {
+  let result = with_runtime(fn(runtime) {
+    let dep = runtime.load_module(
+      "file:///feature/dep.mjs", "export const value = 42;",
+    )
+    guard dep is Ok(_) else { return Err(dep.unwrap_err()) }
+    let module_handle = runtime.eval_module_handle_string_with_specifier(
+      "file:///feature/main.mjs", "import { value } from './dep.mjs'; export const answer = value",
+    )
+    guard module_handle is Ok(_) else { return Err(module_handle.unwrap_err()) }
+    module_handle.unwrap().get_export_json("answer")
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "disposing module handle surfaces as err" {
+  let result = with_runtime(fn(runtime) {
+    let module_handle = runtime.eval_module_handle_string(
+      "export const answer = 42;",
+    )
+    guard module_handle is Ok(_) else { return Err(module_handle.unwrap_err()) }
+    let module_handle = module_handle.unwrap()
+    module_handle.dispose()
+    Ok(is_err(module_handle.get_export_json("answer")))
+  })
+  inspect(result, content="Ok(true)")
+}
+
+///|
+test "runtime can get module bytes export" {
+  let result = with_runtime(fn(runtime) {
+    let module_handle = runtime.eval_module_handle_string(
+      "export const data = new Uint8Array([65, 66, 67])",
+    )
+    guard module_handle is Ok(_) else { return Err(module_handle.unwrap_err()) }
+    let bytes = module_handle.unwrap().get_export_bytes("data")
+    guard bytes is Ok(_) else { return Err(bytes.unwrap_err()) }
+    Ok(@utf8.decode_lossy(bytes.unwrap()))
+  })
+  inspect(result, content="Ok(\"ABC\")")
+}
+
+///|
+test "runtime can call module export function with json args" {
+  let result = with_runtime(fn(runtime) {
+    let module_handle = runtime.eval_module_handle_string(
+      "export const add = (a, b) => ({ answer: a + b })",
+    )
+    guard module_handle is Ok(_) else { return Err(module_handle.unwrap_err()) }
+    module_handle.unwrap().call_export_json("add", "[20,22]")
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}\")")
+}
+
+///|
+test "runtime can call async module export function with json args" {
+  let result = with_runtime(fn(runtime) {
+    let module_handle = runtime.eval_module_handle_string(
+      "export const load = async (base) => ({ answer: base + 2 })",
+    )
+    guard module_handle is Ok(_) else { return Err(module_handle.unwrap_err()) }
+    module_handle.unwrap().call_export_json("load", "[40]")
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}\")")
+}
+
+///|
+test "runtime can call module export function with bytes arg" {
+  let result = with_runtime(fn(runtime) {
+    let module_handle = runtime.eval_module_handle_string(
+      "export const reverse_buf = (buf) => new Uint8Array([buf[2], buf[1], buf[0]])",
+    )
+    guard module_handle is Ok(_) else { return Err(module_handle.unwrap_err()) }
+    let called = module_handle
+      .unwrap()
+      .call_export_bytes("reverse_buf", @utf8.encode("ABC"))
+    guard called is Ok(_) else { return Err(called.unwrap_err()) }
+    Ok(@utf8.decode_lossy(called.unwrap()))
+  })
+  inspect(result, content="Ok(\"CBA\")")
+}
+
+///|
+test "preloaded module imports are resolved" {
+  let result = with_runtime(fn(runtime) {
+    let loaded = runtime.load_module("dep", "export const answer = 41;")
+    guard loaded is Ok(_) else { return Err(loaded.unwrap_err()) }
+    let evaluated = runtime.eval_module_string(
+      "import { answer } from 'dep'; globalThis.__preloaded_answer = answer + 1",
+    )
+    guard evaluated is Ok(_) else { return Err(evaluated.unwrap_err()) }
+    runtime.eval_string("globalThis.__preloaded_answer")
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "named module specifier resolves relative imports from nested base" {
+  let result = with_runtime(fn(runtime) {
+    let dep = runtime.load_module(
+      "file:///feature/dep.mjs", "export const answer = 42;",
+    )
+    guard dep is Ok(_) else { return Err(dep.unwrap_err()) }
+    let evaluated = runtime.eval_module_string_with_specifier(
+      "file:///feature/main.mjs", "import { answer } from './dep.mjs'; globalThis.__named_module_answer = answer",
+    )
+    guard evaluated is Ok(_) else { return Err(evaluated.unwrap_err()) }
+    runtime.eval_string("globalThis.__named_module_answer")
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "relative module imports are resolved recursively" {
+  let result = with_runtime(fn(runtime) {
+    let nested = runtime.load_module(
+      "file:///feature/constants.mjs", "export const base = 41;",
+    )
+    guard nested is Ok(_) else { return Err(nested.unwrap_err()) }
+    let dep = runtime.load_module(
+      "file:///feature/dep.mjs", "import { base } from './constants.mjs'; export const answer = base + 1;",
+    )
+    guard dep is Ok(_) else { return Err(dep.unwrap_err()) }
+    let evaluated = runtime.eval_module_string(
+      "import { answer } from './feature/dep.mjs'; globalThis.__relative_answer = answer",
+    )
+    guard evaluated is Ok(_) else { return Err(evaluated.unwrap_err()) }
+    runtime.eval_string("globalThis.__relative_answer")
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "dynamic import resolves relative module from module context" {
+  let result = with_runtime(fn(runtime) {
+    let dep = runtime.load_module(
+      "file:///feature/dynamic.mjs", "export const answer = 42;",
+    )
+    guard dep is Ok(_) else { return Err(dep.unwrap_err()) }
+    let evaluated = runtime.eval_module_string(
+      "globalThis.__dynamic_relative = (await import('./feature/dynamic.mjs')).answer",
+    )
+    guard evaluated is Ok(_) else { return Err(evaluated.unwrap_err()) }
+    runtime.eval_string("globalThis.__dynamic_relative")
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "missing module imports surface as err" {
   inspect(
     is_err(eval_module_string("import 'dep'; export default 1")),
     content="true",
@@ -91,4 +1134,59 @@ test "module evaluation resolves top-level await" {
     runtime.eval_string("globalThis.__module_async")
   })
   inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "runtime can await async module handle without top-level await" {
+  let result = with_runtime(fn(runtime) {
+    let module_eval = runtime.eval_module_handle_async_string(
+      "export const answer = 42;",
+    )
+    guard module_eval is Ok(_) else { return Err(module_eval.unwrap_err()) }
+    let module_handle = module_eval.unwrap().await_ready()
+    guard module_handle is Ok(_) else { return Err(module_handle.unwrap_err()) }
+    module_handle.unwrap().get_export_json("answer")
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "runtime can drive top-level await module through async json op" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_async_json_op("load_answer")
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let module_eval = runtime.eval_module_handle_async_string_with_specifier(
+      "file:///feature/main.mjs", "const payload = await MoonBit.opAsync('load_answer', { base: 40 }); export const answer = payload.base + 2;",
+    )
+    guard module_eval is Ok(_) else { return Err(module_eval.unwrap_err()) }
+    let module_eval = module_eval.unwrap()
+    let promise = match module_eval.promise_handle() {
+      Some(promise) => promise
+      None => return Ok("missing")
+    }
+    let initial_state = promise.state()
+    guard initial_state is Ok(_) else { return Err(initial_state.unwrap_err()) }
+    let op = runtime.take_async_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    let resolved = runtime.resolve_async_json_op(op.id, "{\"base\":40}")
+    guard resolved is Ok(_) else { return Err(resolved.unwrap_err()) }
+    let module_handle = module_eval.await_ready()
+    guard module_handle is Ok(_) else { return Err(module_handle.unwrap_err()) }
+    let answer = module_handle.unwrap().get_export_json("answer")
+    guard answer is Ok(_) else { return Err(answer.unwrap_err()) }
+    Ok(
+      promise_state_name(initial_state.unwrap()) +
+      ":" +
+      op.name +
+      ":" +
+      op.payload_json +
+      ":" +
+      answer.unwrap(),
+    )
+  })
+  inspect(result, content="Ok(\"Pending:load_answer:{\\\"base\\\":40}:42\")")
 }

@@ -31,6 +31,26 @@ jobs:
         run: moon version --all
       - name: Moon update
         run: moon update
+      - name: Configure rusty_v8 binding
+        run: |
+          arch="$(uname -m)"
+          case "$arch" in
+            arm64|aarch64)
+              binding="$GITHUB_WORKSPACE/deps/rusty_v8/gen/src_binding_release_aarch64-apple-darwin.rs"
+              ;;
+            x86_64)
+              binding="$GITHUB_WORKSPACE/deps/rusty_v8/gen/src_binding_release_x86_64-apple-darwin.rs"
+              ;;
+            *)
+              binding=""
+              ;;
+          esac
+          if [[ -n "$binding" && -f "$binding" ]]; then
+            echo "RUSTY_V8_SRC_BINDING_PATH=$binding" >> "$GITHUB_ENV"
+            echo "Using checked-in rusty_v8 binding: $binding"
+          else
+            echo "No checked-in rusty_v8 binding for arch=$arch; falling back to upstream download"
+          fi
       - name: Verify format
         run: just fmt-check
       - name: Verify generated interfaces
@@ -53,6 +73,26 @@ jobs:
         run: moon version --all
       - name: Moon update
         run: moon update
+      - name: Configure rusty_v8 binding
+        run: |
+          arch="$(uname -m)"
+          case "$arch" in
+            arm64|aarch64)
+              binding="$GITHUB_WORKSPACE/deps/rusty_v8/gen/src_binding_release_aarch64-apple-darwin.rs"
+              ;;
+            x86_64)
+              binding="$GITHUB_WORKSPACE/deps/rusty_v8/gen/src_binding_release_x86_64-apple-darwin.rs"
+              ;;
+            *)
+              binding=""
+              ;;
+          esac
+          if [[ -n "$binding" && -f "$binding" ]]; then
+            echo "RUSTY_V8_SRC_BINDING_PATH=$binding" >> "$GITHUB_ENV"
+            echo "Using checked-in rusty_v8 binding: $binding"
+          else
+            echo "No checked-in rusty_v8 binding for arch=$arch; falling back to upstream download"
+          fi
       - name: Moon check
         run: just check
       - name: Moon test
