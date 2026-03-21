@@ -6,6 +6,7 @@ async fn main {
   match @oden.route_cli(@env.args()[1:].to_array()) {
     Ok(@oden.OdenCliRoute::Help) => println(@oden.help_text())
     Ok(@oden.OdenCliRoute::Version) => println(@oden.version_text())
+    Ok(@oden.OdenCliRoute::Plan(plan)) => println(@oden.plan_json(plan))
     Ok(@oden.OdenCliRoute::Manifest) =>
       match @oden.cli_manifest_json() {
         Ok(value) => println(value)

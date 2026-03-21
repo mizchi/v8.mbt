@@ -146,7 +146,7 @@ For the complete public surface and more examples, see [src/README.mbt.md](src/R
 - this project primarily targets low-level embedder bindings; Deno compatibility is currently limited to an opt-in `Deno.core` op/util shim plus a few top-level `Deno` helpers, and Node compatibility to a minimal `global` / `process` / `Buffer` shim
 - the MoonBit async event-loop driver allows only one active loop per runtime and assumes you do not mix it with manual `take_async_*_op` handling on the same lane
 - `Deno.sleep` and the minimal `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` shim are built on queue-based async ops and also occupy runtime resource entries; `Deno.core.refOpPromise` / `unrefOpPromise` update that ref state
-- `oden/` is now split out as a sibling MoonBit module with its own `moon.mod.json`, so you can keep runtime/CLI experiments separate while still depending on this package by local path; that module currently carries the MoonBit-first `oden` router for `run` / `check` / `test` / `bundle` / `fmt` / `info` / `task`
+- `oden/` is now split out as a sibling MoonBit module with its own `moon.mod.json`, so you can keep runtime/CLI experiments separate while still depending on this package by local path; that module currently carries the MoonBit-first `oden` router for `run` / `check` / `test` / `bundle` / `fmt` / `info` / `task` / `plan`
 - mooncakes consumers still need a one-time setup step today
 - local path dependencies do not run install hooks automatically, but `setup-consumer.mjs --build-bridge` can cover the same bootstrap step
 

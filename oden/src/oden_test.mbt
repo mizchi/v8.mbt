@@ -13,6 +13,8 @@ test "oden module can expose cli manifest" {
         ":" +
         value.contains("\"task\"").to_string() +
         ":" +
+        value.contains("\"plan\"").to_string() +
+        ":" +
         value.contains("\"language\":\"moonbit\"").to_string() +
         ":" +
         value.contains("\"firstClassTargets\":[\"js\",\"wasm\"]").to_string() +
@@ -21,7 +23,10 @@ test "oden module can expose cli manifest" {
       )
     Err(err) => Err(err)
   }
-  inspect(result, content="Ok(\"true:true:true:true:true:true:true:true\")")
+  inspect(
+    result,
+    content="Ok(\"true:true:true:true:true:true:true:true:true\")",
+  )
 }
 
 ///|
@@ -159,6 +164,61 @@ test "oden routes task arguments to just without rewriting" {
 }
 
 ///|
+test "oden routes plan command without executing" {
+  let result = match route_cli(["plan", "bundle", "app/main"]) {
+    Ok(OdenCliRoute::Plan(plan)) =>
+      plan.name +
+      ":" +
+      plan.program +
+      ":" +
+      plan.target +
+      ":" +
+      plan.argv[0] +
+      ":" +
+      plan.argv[1] +
+      ":" +
+      plan.argv[2] +
+      ":" +
+      plan.argv[3]
+    Ok(_) => "unexpected"
+    Err(err) => err
+  }
+  inspect(result, content="bundle:moon:wasm-gc:build:app/main:--target:wasm-gc")
+}
+
+///|
+test "oden rejects empty plan command" {
+  let result = match route_cli(["plan"]) {
+    Ok(_) => "unexpected"
+    Err(err) => err
+  }
+  inspect(result, content="plan requires a subcommand")
+}
+
+///|
+test "oden can stringify plan json" {
+  let result = match route_cli(["plan", "task", "check"]) {
+    Ok(OdenCliRoute::Plan(plan)) => plan_json(plan)
+    Ok(_) => "unexpected"
+    Err(err) => err
+  }
+  inspect(
+    result.contains("\"name\":\"task\"").to_string() +
+    ":" +
+    result.contains("\"program\":\"just\"").to_string() +
+    ":" +
+    result.contains("\"kind\":\"task\"").to_string() +
+    ":" +
+    result.contains("\"cwd\":\".\"").to_string() +
+    ":" +
+    result.contains("\"argv\":[\"check\"]").to_string() +
+    ":" +
+    result.contains("\"target\":\"none\"").to_string(),
+    content="true:true:true:true:true:true",
+  )
+}
+
+///|
 test "oden supports help and version aliases" {
   let result = match
     (
@@ -197,12 +257,12 @@ test "oden can expose version text" {
 test "oden builder preloads compat" {
   let result = builder_new().with_runtime(fn(runtime) {
     runtime.eval_json(
-      "({ sameCore: Oden.core === Deno.core, bundleTarget: Oden.cli.command('bundle').defaultTarget, hasFmt: Oden.cli.command('fmt') !== null, hasTask: Oden.cli.command('task') !== null, execPath: Oden.execPath() })",
+      "({ sameCore: Oden.core === Deno.core, bundleTarget: Oden.cli.command('bundle').defaultTarget, hasFmt: Oden.cli.command('fmt') !== null, hasTask: Oden.cli.command('task') !== null, hasPlan: Oden.cli.command('plan') !== null, execPath: Oden.execPath() })",
     )
   })
   inspect(
     result,
-    content="Ok(\"{\\\"sameCore\\\":true,\\\"bundleTarget\\\":\\\"wasm\\\",\\\"hasFmt\\\":true,\\\"hasTask\\\":true,\\\"execPath\\\":\\\"/mizchi-oden/bin/oden\\\"}\")",
+    content="Ok(\"{\\\"sameCore\\\":true,\\\"bundleTarget\\\":\\\"wasm\\\",\\\"hasFmt\\\":true,\\\"hasTask\\\":true,\\\"hasPlan\\\":true,\\\"execPath\\\":\\\"/mizchi-oden/bin/oden\\\"}\")",
   )
 }
 

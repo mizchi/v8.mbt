@@ -14,6 +14,8 @@ pub fn help_text() -> String
 
 pub fn install(@v8.Runtime) -> Result[Unit, @v8.V8Error]
 
+pub fn plan_json(OdenCliPlan) -> String
+
 pub fn route_cli(Array[String]) -> Result[OdenCliRoute, String]
 
 pub fn snapshot_builder_new() -> @v8.SnapshotBuilder
@@ -27,8 +29,10 @@ pub fn[T] with_runtime((@v8.Runtime) -> Result[T, @v8.V8Error]) -> Result[T, @v8
 // Types and methods
 pub struct OdenCliPlan {
   name : String
+  kind : String
   program : String
   argv : Array[String]
+  cwd : String
   target : String
 }
 
@@ -36,6 +40,7 @@ pub enum OdenCliRoute {
   Help
   Version
   Manifest
+  Plan(OdenCliPlan)
   Exec(OdenCliPlan)
 }
 

@@ -146,7 +146,7 @@ match @v8.runtime_new() {
 - embedder 向けの低レベル binding が主眼で、Deno 互換は `Deno.core` の op/util shim と最小の top-level `Deno` utility に限り、Node 互換も `global` / `process` / `Buffer` の最小 shim に限ります
 - MoonBit async event loop driver は 1 runtime あたり 1 本だけ同時に回せて、同じ lane の `take_async_*_op` 手動 loop とは混在させない前提です
 - `Deno.sleep` と最小 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` は queue ベース async op の上に載せつつ runtime resource table にも載り、`Deno.core.refOpPromise` / `unrefOpPromise` はその ref state を更新します
-- `oden/` は root とは別の `moon.mod.json` を持つ sibling module として切り出してあり、`mizchi/v8` を local path dependency として使いながら CLI 層を別管理できます。現状は `run` / `check` / `test` / `bundle` / `fmt` / `info` / `task` を MoonBit-first に張り替える router をこの module 側に置いています
+- `oden/` は root とは別の `moon.mod.json` を持つ sibling module として切り出してあり、`mizchi/v8` を local path dependency として使いながら CLI 層を別管理できます。現状は `run` / `check` / `test` / `bundle` / `fmt` / `info` / `task` / `plan` を MoonBit-first に張り替える router をこの module 側に置いています
 - mooncakes の consumer 側では現在も 1 回限りの setup が必要です
 - local path dependency では install hook は自動実行されませんが、`setup-consumer.mjs --build-bridge` で同等の初期化を寄せられます
 
