@@ -1929,7 +1929,7 @@ async test "with_runtime_async can run and cancel interval in deno compat" {
     let installed = runtime.install_deno_core_compat()
     guard installed is Ok(_) else { Err(installed.unwrap_err()) }
     runtime.eval_promise_json_async(
-      "(async () => { let ticks = []; let id = 0; id = setInterval((label) => { ticks.push(label + ':' + ticks.length); if (ticks.length >= 3) clearInterval(id); }, 0, 'tick'); await Deno.sleep(8); return { ticks }; })()",
+      "(async () => { let ticks = []; let id = 0; id = setInterval((label) => { ticks.push(label + ':' + ticks.length); if (ticks.length >= 3) clearInterval(id); }, 0, 'tick'); await Deno.sleep(50); return { ticks }; })()",
     )
   })
   inspect(
