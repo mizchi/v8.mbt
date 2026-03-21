@@ -42,6 +42,12 @@ main package が別の場所にある場合は明示してください。
 node .mooncakes/mizchi/v8/src/scripts/setup-consumer.mjs --main-pkg app/server/moon.pkg
 ```
 
+local path dependency で install hook が走らない場合は、同じ helper に `--build-bridge` を付けて checkout 側の native bridge も先に作れます。
+
+```bash
+node ../v8.mbt/src/scripts/setup-consumer.mjs --module-root . --main-pkg cmd/main/moon.pkg --build-bridge
+```
+
 ### 前提
 
 - `git`
@@ -131,7 +137,7 @@ match @v8.runtime_new() {
 - native target 専用です
 - Node / Deno 互換 API ではなく、embedder 向けの低レベル binding を狙っています
 - mooncakes の consumer 側では現在も 1 回限りの setup が必要です
-- local path dependency は `moon add` 時の install hook と同じ挙動にはなりません
+- local path dependency では install hook は自動実行されませんが、`setup-consumer.mjs --build-bridge` で同等の初期化を寄せられます
 
 ## ドキュメント
 

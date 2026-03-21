@@ -63,7 +63,7 @@
 - native target のみを対象にしている
 - Node / Deno 互換層は提供していない
 - 非同期 host 連携は queue ベースの op に加えて direct callback / result callback でも扱え、失敗 reason には String だけでなく JSON value も使える
-- 現状は mooncakes から import する consumer module 側にも 1 回限りの設定が必要だが、同梱 setup script で一般的な導線は自動化できる
+- 現状は mooncakes から import する consumer module 側にも 1 回限りの設定が必要だが、同梱 setup script で一般的な導線を自動化でき、local path dependency でも `--build-bridge` を付ければ bridge build まで寄せられる
 
 ## 設計メモ
 

@@ -1,3 +1,4 @@
+import child_process from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import process from "node:process"
@@ -12,11 +13,19 @@ const example_prebuild_path = path.join(
   "mizchi-v8-consumer-prebuild.mjs",
 )
 const build_var = "${build.MIZCHI_V8_CC_LINK_FLAGS}"
+const build_stamp_path = path.join(
+  v8_root,
+  "src",
+  "build-stamps",
+  "rusty_v8_build.stamp",
+)
+const build_script_path = path.join(v8_root, "src", "scripts", "build-rusty-v8.sh")
 
 function parse_args(argv) {
   let module_root = process.cwd()
   let main_pkg = null
   let allow_create_main = false
+  let build_bridge = false
   for (let i = 0; i < argv.length; i = i + 1) {
     const arg = argv[i]
     if (arg === "--module-root") {
@@ -27,6 +36,8 @@ function parse_args(argv) {
       main_pkg = argv[i] ?? ""
     } else if (arg === "--allow-create-main") {
       allow_create_main = true
+    } else if (arg === "--build-bridge") {
+      build_bridge = true
     } else if (arg === "--help" || arg === "-h") {
       print_help()
       process.exit(0)
@@ -34,7 +45,7 @@ function parse_args(argv) {
       throw new Error(`unknown argument: ${arg}`)
     }
   }
-  return { module_root, main_pkg, allow_create_main }
+  return { module_root, main_pkg, allow_create_main, build_bridge }
 }
 
 function print_help() {
@@ -46,6 +57,7 @@ function print_help() {
       "  --module-root <dir>   Consumer module root. Defaults to cwd.",
       "  --main-pkg <path>     Main package moon.pkg path, relative to module root.",
       "  --allow-create-main   Create the main package file if it does not exist.",
+      "  --build-bridge        Build the native bridge in this checkout before patching the consumer.",
     ].join("\n"),
   )
 }
@@ -182,12 +194,35 @@ function update_main_pkg(module_root, main_pkg_rel_path, allow_create_main) {
   fs.writeFileSync(main_pkg_path, text)
 }
 
+function build_bridge_if_needed(enabled) {
+  if (!enabled) {
+    return
+  }
+  const result = child_process.spawnSync(
+    "bash",
+    [build_script_path, build_stamp_path],
+    {
+      cwd: v8_root,
+      stdio: "inherit",
+    },
+  )
+  if (result.status !== 0) {
+    throw new Error(
+      `native bridge build failed with exit code ${result.status ?? "unknown"}`,
+    )
+  }
+}
+
 const args = parse_args(process.argv.slice(2))
 const main_pkg_rel_path = args.main_pkg ?? detect_main_pkg(args.module_root)
+build_bridge_if_needed(args.build_bridge)
 const prebuild_rel_path = ensure_example_script(args.module_root)
 update_moon_mod(args.module_root, prebuild_rel_path)
 update_main_pkg(args.module_root, main_pkg_rel_path, args.allow_create_main)
 
+if (args.build_bridge) {
+  console.error(`[mizchi/v8] built native bridge in ${v8_root}`)
+}
 console.error(`[mizchi/v8] wrote ${prebuild_rel_path}`)
 console.error(`[mizchi/v8] updated moon.mod.json`)
 console.error(`[mizchi/v8] updated ${main_pkg_rel_path}`)

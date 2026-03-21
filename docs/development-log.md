@@ -63,7 +63,7 @@ This document tracks the implementation status, design notes, and known limitati
 - native target only
 - no Node / Deno compatibility layer
 - async host integration can now use queue-based ops, direct callbacks, and result callbacks, and failure reasons can be passed as JSON values as well as plain strings
-- consumer modules still need one-time setup when importing this package from mooncakes today, although the bundled setup script now automates the common path
+- consumer modules still need one-time setup when importing this package from mooncakes today, although the bundled setup script now automates the common path and can also build the bridge for local path dependencies via `--build-bridge`
 
 ## Design Notes
 

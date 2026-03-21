@@ -42,6 +42,12 @@ If your main package lives somewhere else, pass it explicitly:
 node .mooncakes/mizchi/v8/src/scripts/setup-consumer.mjs --main-pkg app/server/moon.pkg
 ```
 
+If you use a local path dependency and the install hook does not run, the same helper can also build the native bridge in that checkout:
+
+```bash
+node ../v8.mbt/src/scripts/setup-consumer.mjs --module-root . --main-pkg cmd/main/moon.pkg --build-bridge
+```
+
 ### Prerequisites
 
 - `git`
@@ -131,7 +137,7 @@ For the complete public surface and more examples, see [src/README.mbt.md](src/R
 - native target only
 - this project targets low-level embedder bindings, not Node / Deno compatibility APIs
 - mooncakes consumers still need a one-time setup step today
-- local path dependencies do not get the same install-time hook behavior as `moon add`
+- local path dependencies do not run install hooks automatically, but `setup-consumer.mjs --build-bridge` can cover the same bootstrap step
 
 ## Documentation
 

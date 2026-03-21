@@ -14,6 +14,7 @@ All notable changes to this project should be documented in this file.
 - JSON-valued throw/reject reasons via `register_*_result_callback_with_json_error` and `reject_async_*_op_with_json`
 - Multiple runtimes can now coexist in the same process
 - Bundled `src/scripts/setup-consumer.mjs` to automate the common mooncakes consumer setup path
+- `setup-consumer.mjs --build-bridge` to cover local path dependency bootstrapping from the same helper
 
 ### Changed
 
