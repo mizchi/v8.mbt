@@ -21,7 +21,7 @@
 
 ## Status
 
-- version: `0.1.0`
+- version: `0.2.0`
 - target: `native`
 - usable as an embedder-facing experimental binding
 - implementation status and known gaps are tracked in [docs/development-log.md](docs/development-log.md)

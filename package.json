@@ -1,7 +1,7 @@
 {
   "name": "@mizchi/v8.mbt",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MoonBit bindings for V8 aimed at prototyping MoonBit-first runtimes in the style of Node or Deno.",
   "license": "Apache-2.0",
   "repository": {

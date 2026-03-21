@@ -42,7 +42,7 @@ async fn write_temp_run_module(
     (
       #|{
       #|  "name": "tmp/oden_run_fixture",
-      #|  "version": "0.1.0",
+      #|  "version": "0.2.0",
       #|  "source": "src",
       #|  "deps": {
       #|    "moonbitlang/async": "0.16.8"
@@ -53,7 +53,7 @@ async fn write_temp_run_module(
     (
       #|{
       #|  "name": "tmp/oden_run_fixture",
-      #|  "version": "0.1.0",
+      #|  "version": "0.2.0",
       #|  "source": "src"
       #|}
     )

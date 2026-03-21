@@ -21,7 +21,7 @@
 
 ## ステータス
 
-- バージョン: `0.1.0`
+- バージョン: `0.2.0`
 - 対応 target: `native`
 - embedder 実験用として使える状態です
 - 実装状況と未実装項目は [docs/development-log.ja.md](docs/development-log.ja.md) に分離しています
