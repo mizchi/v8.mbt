@@ -69,6 +69,7 @@ This document tracks the implementation status, design notes, and known limitati
 - `with_runtime_async` and `eval_promise_*_async` now let MoonBit async code use that same loop without wiring `PromiseHandle` manually
 - top-level await modules can now be driven through the same path with `Runtime::eval_module_handle_string_async`
 - consumer modules still need one-time setup when importing this package from mooncakes today, although the bundled setup script now automates the common path and can also build the bridge for local path dependencies via `--build-bridge`
+- `oden/` now exists as a sibling MoonBit module with its own `moon.mod.json`, so runtime/CLI experiments can be developed separately on top of `mizchi/v8`; its current MoonBit-first router covers `run` / `check` / `test` / `bundle` / `fmt` / `info` plus help/version/manifest
 
 ## Design Notes
 

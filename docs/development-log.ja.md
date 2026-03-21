@@ -69,6 +69,7 @@
 - `with_runtime_async` と `eval_promise_*_async` で、PromiseHandle を手でつながなくても MoonBit async 側から同じ loop を使える
 - top-level await module も `Runtime::eval_module_handle_string_async` で同じ loop に直接載せられる
 - 現状は mooncakes から import する consumer module 側にも 1 回限りの設定が必要だが、同梱 setup script で一般的な導線を自動化でき、local path dependency でも `--build-bridge` を付ければ bridge build まで寄せられる
+- `oden/` 配下には root とは別の `moon.mod.json` を持つ sibling module を切ってあり、`mizchi/v8` を local path dependency として使いながら CLI 層を別管理できる。現状の MoonBit-first router は `run` / `check` / `test` / `bundle` / `fmt` / `info` と help/version/manifest を持つ
 
 ## 設計メモ
 

@@ -2,7 +2,7 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-`mizchi/v8` is a native-only V8 binding for MoonBit. It is intended as a foundation for prototyping MoonBit-first embedded runtimes in the style of Node or Deno.
+`mizchi/v8` is a native-only V8 binding for MoonBit. It is intended as a foundation for prototyping embedded runtimes in the style of Node or Deno.
 
 > Experimental release note: on Moon `0.1.20260309` / MoonBit `v0.8.3`, this package still requires consumer-side prebuild and link setup.
 
@@ -17,6 +17,7 @@
 - drive Deno-style `opAsync` and top-level await through MoonBit's async event loop
 - preload an opt-in Deno shim with `Deno.core.op*`, utility helpers, and minimal `Deno.inspect` / `cwd` / `execPath`
 - preload an opt-in Node-style shim with `global`, `process.nextTick`, and a minimal `Buffer`
+- keep `oden/` as a sibling module when you want to prototype a separate runtime/CLI on top of `mizchi/v8`
 
 ## Status
 
@@ -145,6 +146,7 @@ For the complete public surface and more examples, see [src/README.mbt.md](src/R
 - this project primarily targets low-level embedder bindings; Deno compatibility is currently limited to an opt-in `Deno.core` op/util shim plus a few top-level `Deno` helpers, and Node compatibility to a minimal `global` / `process` / `Buffer` shim
 - the MoonBit async event-loop driver allows only one active loop per runtime and assumes you do not mix it with manual `take_async_*_op` handling on the same lane
 - `Deno.sleep` and the minimal `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` shim are built on queue-based async ops and also occupy runtime resource entries; `Deno.core.refOpPromise` / `unrefOpPromise` update that ref state
+- `oden/` is now split out as a sibling MoonBit module with its own `moon.mod.json`, so you can keep runtime/CLI experiments separate while still depending on this package by local path; that module currently carries the MoonBit-first `oden` router for `run` / `check` / `test` / `bundle` / `fmt` / `info`
 - mooncakes consumers still need a one-time setup step today
 - local path dependencies do not run install hooks automatically, but `setup-consumer.mjs --build-bridge` can cover the same bootstrap step
 

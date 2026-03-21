@@ -28,6 +28,21 @@ run:
 info:
     moon info
 
+oden-fmt:
+    moon -C oden fmt
+
+oden-check:
+    moon -C oden check --deny-warn --target {{target}}
+
+oden-test:
+    moon -C oden test --target {{target}}
+
+oden-run:
+    moon -C oden run src/main --target {{target}}
+
+oden-info:
+    moon -C oden info --target {{target}}
+
 info-check:
     moon info
     git diff --exit-code -- ':(glob)**/*.generated.mbti'

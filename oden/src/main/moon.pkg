@@ -1,0 +1,13 @@
+import {
+  "moonbitlang/core/env",
+  "moonbitlang/async",
+  "moonbitlang/async/process",
+  "mizchi/oden" @oden,
+  "mizchi/v8" @v8,
+}
+
+options(
+  "is-main": true,
+  link: { "native": { "cc-link-flags": "${build.MIZCHI_V8_CC_LINK_FLAGS}" } },
+  "supported-targets": "native",
+)

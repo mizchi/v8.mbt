@@ -1,0 +1,45 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/oden"
+
+import {
+  "mizchi/v8",
+}
+
+// Values
+pub fn builder_new() -> @v8.RuntimeBuilder
+
+pub fn cli_manifest_json() -> Result[String, @v8.V8Error]
+
+pub fn help_text() -> String
+
+pub fn install(@v8.Runtime) -> Result[Unit, @v8.V8Error]
+
+pub fn route_cli(Array[String]) -> Result[OdenCliRoute, String]
+
+pub fn snapshot_builder_new() -> @v8.SnapshotBuilder
+
+pub fn version_text() -> String
+
+pub fn[T] with_runtime((@v8.Runtime) -> Result[T, @v8.V8Error]) -> Result[T, @v8.V8Error]
+
+// Errors
+
+// Types and methods
+pub struct OdenCliPlan {
+  name : String
+  moon_subcommand : String
+  argv : Array[String]
+  target : String
+}
+
+pub enum OdenCliRoute {
+  Help
+  Version
+  Manifest
+  Exec(OdenCliPlan)
+}
+
+// Type aliases
+
+// Traits
+

@@ -1,0 +1,35 @@
+{
+  "name": "mizchi/oden",
+  "version": "0.1.0",
+  "deps": {
+    "moonbitlang/async": "0.16.8",
+    "mizchi/v8": {
+      "path": ".."
+    }
+  },
+  "readme": "README.md",
+  "repository": "https://github.com/mizchi/v8.mbt/tree/main/oden",
+  "license": "Apache-2.0",
+  "keywords": [
+    "moonbit",
+    "oden",
+    "v8",
+    "runtime",
+    "cli"
+  ],
+  "description": "Oden CLI/runtime prototype developed as a separate MoonBit module on top of mizchi/v8.",
+  "source": "src",
+  "exclude": [
+    ".mooncakes",
+    "_build",
+    "target",
+    "trace.json",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "--moonbit-unstable-prebuild": "scripts/prebuild.mjs",
+  "preferred-target": "native",
+  "supported-targets": [
+    "native"
+  ]
+}

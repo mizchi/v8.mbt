@@ -1,0 +1,18 @@
+target := "native"
+
+default: check test
+
+fmt:
+    moon fmt
+
+check:
+    moon check --deny-warn --target {{target}}
+
+test:
+    moon test --target {{target}}
+
+run:
+    moon run src/main --target {{target}}
+
+info:
+    moon info --target {{target}}
