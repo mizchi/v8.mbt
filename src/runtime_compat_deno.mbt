@@ -1,4 +1,65 @@
 ///|
+fn deno_core_resources_op_name() -> String {
+  "__mizchi_v8_deno_resources__"
+}
+
+///|
+fn deno_core_close_op_name() -> String {
+  "__mizchi_v8_deno_close__"
+}
+
+///|
+fn deno_core_try_close_op_name() -> String {
+  "__mizchi_v8_deno_try_close__"
+}
+
+///|
+fn install_deno_core_resource_compat(
+  runtime : Runtime,
+) -> Result[Unit, V8Error] {
+  let registered_resources = runtime.register_sync_json_result_callback(
+    deno_core_resources_op_name(),
+    _payload => {
+      let resources_json = runtime_resource_list_json(runtime)
+      guard resources_json is Ok(_) else {
+        return Err(resources_json.unwrap_err().to_string())
+      }
+      Ok(resources_json.unwrap())
+    },
+  )
+  guard registered_resources is Ok(_) else {
+    return Err(registered_resources.unwrap_err())
+  }
+  let registered_close = runtime.register_sync_json_result_callback(
+    deno_core_close_op_name(),
+    payload_json => {
+      let rid = parse_resource_rid(payload_json)
+      guard rid is Ok(_) else { return Err(rid.unwrap_err()) }
+      let closed = runtime.close_resource(rid.unwrap())
+      guard closed is Ok(_) else { return Err(closed.unwrap_err().to_string()) }
+      Ok("null")
+    },
+  )
+  guard registered_close is Ok(_) else {
+    return Err(registered_close.unwrap_err())
+  }
+  let registered_try_close = runtime.register_sync_json_result_callback(
+    deno_core_try_close_op_name(),
+    payload_json => {
+      let rid = parse_resource_rid(payload_json)
+      guard rid is Ok(_) else { return Err(rid.unwrap_err()) }
+      let closed = runtime.try_close_resource(rid.unwrap())
+      guard closed is Ok(_) else { return Err(closed.unwrap_err().to_string()) }
+      Ok(Json::boolean(closed.unwrap()).stringify())
+    },
+  )
+  guard registered_try_close is Ok(_) else {
+    return Err(registered_try_close.unwrap_err())
+  }
+  Ok(())
+}
+
+///|
 fn deno_core_compat_source() -> String {
   "(function(){ " +
   "const root = globalThis; " +
@@ -25,9 +86,15 @@ fn deno_core_compat_source() -> String {
   "if (typeof core.opAsyncBytes !== 'function') core.opAsyncBytes = function(name, payload){ return MoonBit.opAsyncBytes(name, payload); }; " +
   "if (typeof core.encode !== 'function') core.encode = encode; " +
   "if (typeof core.decode !== 'function') core.decode = decode; " +
-  "if (typeof core.resources !== 'function') core.resources = function(){ return {}; }; " +
-  "if (typeof core.close !== 'function') core.close = function(_rid){}; " +
-  "if (typeof core.tryClose !== 'function') core.tryClose = function(_rid){}; " +
+  "if (typeof core.resources !== 'function') core.resources = function(){ return MoonBit.opSync('" +
+  deno_core_resources_op_name() +
+  "', null); }; " +
+  "if (typeof core.close !== 'function') core.close = function(rid){ MoonBit.opSync('" +
+  deno_core_close_op_name() +
+  "', rid); }; " +
+  "if (typeof core.tryClose !== 'function') core.tryClose = function(rid){ return MoonBit.opSync('" +
+  deno_core_try_close_op_name() +
+  "', rid); }; " +
   "if (typeof core.refOpPromise !== 'function') core.refOpPromise = function(promise){ return promise; }; " +
   "if (typeof core.unrefOpPromise !== 'function') core.unrefOpPromise = function(promise){ return promise; }; " +
   "if (typeof core.print !== 'function') core.print = function(message, is_err){ if (typeof console !== 'object' || console === null) return; const text = String(message); if (is_err && typeof console.error === 'function') { console.error(text); return; } if (typeof console.log === 'function') console.log(text); }; " +
@@ -41,6 +108,8 @@ fn deno_core_compat_source() -> String {
 pub fn Runtime::install_deno_core_compat(
   self : Runtime,
 ) -> Result[Unit, V8Error] {
+  let registered = install_deno_core_resource_compat(self)
+  guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
   install_compat_source(
     self,
     "file:///compat/deno_core.js",

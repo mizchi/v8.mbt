@@ -19,9 +19,28 @@ priv struct RuntimeAsyncLoopState {
 }
 
 ///|
+priv struct RuntimeResourceEntry {
+  name : String
+  on_close : (() -> Unit)?
+}
+
+///|
+priv struct RuntimeResourceTableState {
+  mut next_rid : Int
+  entries : Map[Int, RuntimeResourceEntry]
+}
+
+///|
+pub struct RuntimeResource {
+  rid : Int
+  name : String
+}
+
+///|
 struct RuntimeState {
   mut handle : UInt64
   async_loop : RuntimeAsyncLoopState
+  resources : RuntimeResourceTableState
 }
 
 ///|
@@ -103,6 +122,10 @@ fn runtime_from_handle(
           pending_tasks: 0,
           is_running: false,
         },
+        resources: RuntimeResourceTableState::{
+          next_rid: 1,
+          entries: Map::new(),
+        },
       }),
     })
   }
@@ -145,6 +168,7 @@ pub fn Runtime::is_closed(self : Runtime) -> Bool {
 pub fn Runtime::dispose(self : Runtime) -> Unit {
   let handle = self.state.val.handle
   if handle != 0 {
+    runtime_close_all_resources(self)
     runtime_delete_native(handle)
     self.state.val.handle = 0
   }

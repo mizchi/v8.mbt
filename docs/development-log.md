@@ -63,6 +63,7 @@ This document tracks the implementation status, design notes, and known limitati
 - native target only
 - compatibility is still partial: Deno is limited to an opt-in `Deno.core` op/util shim plus a few top-level `Deno` helpers, and Node to a minimal `global` / `process` / `Buffer` shim
 - async host integration can now use queue-based ops, direct callbacks, and result callbacks, and failure reasons can be passed as JSON values as well as plain strings
+- the runtime now has an embedder-side resource table, and `Deno.core.resources` / `close` / `tryClose` are backed by that table
 - the MoonBit async event-loop driver can now drive Deno-style pending ops, but it allows only one active loop per runtime and assumes you do not mix it with manual `take_async_*_op` handling on the same lane
 - `with_runtime_async` and `eval_promise_*_async` now let MoonBit async code use that same loop without wiring `PromiseHandle` manually
 - top-level await modules can now be driven through the same path with `Runtime::eval_module_handle_string_async`

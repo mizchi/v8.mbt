@@ -172,6 +172,70 @@ test "runtime can call async global function with bytes" {
 }
 
 ///|
+test "runtime can manage resource table" {
+  let closed_count = Ref::new(0)
+  let result = with_runtime(fn(runtime) {
+    let stdin = runtime.add_resource("stdin")
+    guard stdin is Ok(_) else { return Err(stdin.unwrap_err()) }
+    let stdout = runtime.add_resource_with_close("stdout", fn() {
+      closed_count.val = closed_count.val + 1
+    })
+    guard stdout is Ok(_) else { return Err(stdout.unwrap_err()) }
+    let listed = runtime.list_resources()
+    guard listed is Ok(_) else { return Err(listed.unwrap_err()) }
+    let entries = listed.unwrap()
+    let first_name = runtime.get_resource_name(stdin.unwrap())
+    guard first_name is Ok(_) else { return Err(first_name.unwrap_err()) }
+    let closed = runtime.try_close_resource(stdout.unwrap())
+    guard closed is Ok(_) else { return Err(closed.unwrap_err()) }
+    let missing = runtime.try_close_resource(stdout.unwrap())
+    guard missing is Ok(_) else { return Err(missing.unwrap_err()) }
+    let remaining = runtime.list_resources()
+    guard remaining is Ok(_) else { return Err(remaining.unwrap_err()) }
+    Ok(
+      entries.length().to_string() +
+      ":" +
+      entries[0].rid.to_string() +
+      ":" +
+      entries[0].name +
+      ":" +
+      entries[1].rid.to_string() +
+      ":" +
+      entries[1].name +
+      ":" +
+      first_name.unwrap().unwrap_or("") +
+      ":" +
+      closed.unwrap().to_string() +
+      ":" +
+      missing.unwrap().to_string() +
+      ":" +
+      remaining.unwrap().length().to_string() +
+      ":" +
+      closed_count.val.to_string(),
+    )
+  })
+  inspect(result, content="Ok(\"2:1:stdin:2:stdout:stdin:true:false:1:1\")")
+}
+
+///|
+test "runtime dispose closes remaining resources" {
+  let closed_count = Ref::new(0)
+  let runtime = runtime_new()
+  let result = match runtime {
+    Ok(runtime) => {
+      let added = runtime.add_resource_with_close("stdin", fn() {
+        closed_count.val = closed_count.val + 1
+      })
+      guard added is Ok(_) else { Err(added.unwrap_err()) }
+      runtime.dispose()
+      Ok(closed_count.val.to_string() + ":" + runtime.is_closed().to_string())
+    }
+    Err(err) => Err(err)
+  }
+  inspect(result, content="Ok(\"1:true\")")
+}
+
+///|
 test "runtime can install deno core compat for sync json ops" {
   let result = with_runtime(fn(runtime) {
     let installed = runtime.install_deno_core_compat()
@@ -255,13 +319,17 @@ test "runtime can install deno core compat utility helpers" {
   let result = with_runtime(fn(runtime) {
     let installed = runtime.install_deno_core_compat()
     guard installed is Ok(_) else { return Err(installed.unwrap_err()) }
+    let stdin = runtime.add_resource("stdin")
+    guard stdin is Ok(_) else { return Err(stdin.unwrap_err()) }
+    let stdout = runtime.add_resource("stdout")
+    guard stdout is Ok(_) else { return Err(stdout.unwrap_err()) }
     runtime.eval_async_json(
-      "(async () => { const promise = Deno.core.unrefOpPromise(Promise.resolve({ answer: 42 })); Deno.core.close(1); Deno.core.tryClose(1); return { text: Deno.core.decode(Deno.core.encode('AB')), resources: Object.keys(Deno.core.resources()).length, answer: (await promise).answer, inspect: Deno.inspect({ answer: 42 }), cwd: Deno.cwd(), execPath: Deno.execPath(), pid: Deno.pid, noColor: Deno.noColor, exitCode: Deno.exitCode }; })()",
+      "(async () => { const before = Deno.core.resources(); const promise = Deno.core.unrefOpPromise(Promise.resolve({ answer: 42 })); Deno.core.close(1); const closedAgain = Deno.core.tryClose(1); return { text: Deno.core.decode(Deno.core.encode('AB')), before, after: Deno.core.resources(), closedAgain, answer: (await promise).answer, inspect: Deno.inspect({ answer: 42 }), cwd: Deno.cwd(), execPath: Deno.execPath(), pid: Deno.pid, noColor: Deno.noColor, exitCode: Deno.exitCode }; })()",
     )
   })
   inspect(
     result,
-    content="Ok(\"{\\\"text\\\":\\\"AB\\\",\\\"resources\\\":0,\\\"answer\\\":42,\\\"inspect\\\":\\\"{\\\\\\\"answer\\\\\\\":42}\\\",\\\"cwd\\\":\\\"/\\\",\\\"execPath\\\":\\\"/mizchi-v8/deno\\\",\\\"pid\\\":0,\\\"noColor\\\":false,\\\"exitCode\\\":0}\")",
+    content="Ok(\"{\\\"text\\\":\\\"AB\\\",\\\"before\\\":{\\\"1\\\":\\\"stdin\\\",\\\"2\\\":\\\"stdout\\\"},\\\"after\\\":{\\\"2\\\":\\\"stdout\\\"},\\\"closedAgain\\\":false,\\\"answer\\\":42,\\\"inspect\\\":\\\"{\\\\\\\"answer\\\\\\\":42}\\\",\\\"cwd\\\":\\\"/\\\",\\\"execPath\\\":\\\"/mizchi-v8/deno\\\",\\\"pid\\\":0,\\\"noColor\\\":false,\\\"exitCode\\\":0}\")",
   )
 }
 

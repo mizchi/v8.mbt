@@ -149,8 +149,11 @@ pub impl Show for PromiseState
 pub struct Runtime {
   // private fields
 }
+pub fn Runtime::add_resource(Self, String) -> Result[Int, V8Error]
+pub fn Runtime::add_resource_with_close(Self, String, () -> Unit) -> Result[Int, V8Error]
 pub fn Runtime::call_global_bytes(Self, String, Bytes) -> Result[Bytes, V8Error]
 pub fn Runtime::call_global_json(Self, String, String) -> Result[String, V8Error]
+pub fn Runtime::close_resource(Self, Int) -> Result[Unit, V8Error]
 pub fn Runtime::dispose(Self) -> Unit
 pub fn Runtime::eval_async_bytes(Self, String) -> Result[Bytes, V8Error]
 pub fn Runtime::eval_async_bytes_with_name(Self, String, String) -> Result[Bytes, V8Error]
@@ -182,9 +185,11 @@ pub fn Runtime::eval_string(Self, String) -> Result[String, V8Error]
 pub fn Runtime::eval_string_with_name(Self, String, String) -> Result[String, V8Error]
 pub fn Runtime::get_global_bytes(Self, String) -> Result[Bytes, V8Error]
 pub fn Runtime::get_global_json(Self, String) -> Result[String, V8Error]
+pub fn Runtime::get_resource_name(Self, Int) -> Result[String?, V8Error]
 pub fn Runtime::install_deno_core_compat(Self) -> Result[Unit, V8Error]
 pub fn Runtime::install_node_compat(Self) -> Result[Unit, V8Error]
 pub fn Runtime::is_closed(Self) -> Bool
+pub fn Runtime::list_resources(Self) -> Result[Array[RuntimeResource], V8Error]
 pub fn Runtime::load_module(Self, String, String) -> Result[Unit, V8Error]
 pub fn Runtime::load_modules(Self, Array[ModuleSource]) -> Result[Unit, V8Error]
 pub fn Runtime::perform_microtask_checkpoint(Self) -> Result[Unit, V8Error]
@@ -224,6 +229,7 @@ pub fn Runtime::take_async_bytes_op(Self) -> Result[AsyncBytesOpRequest?, V8Erro
 pub fn Runtime::take_async_json_op(Self) -> Result[AsyncJsonOpRequest?, V8Error]
 pub fn Runtime::take_sync_bytes_op(Self) -> Result[SyncBytesOpRequest?, V8Error]
 pub fn Runtime::take_sync_json_op(Self) -> Result[SyncJsonOpRequest?, V8Error]
+pub fn Runtime::try_close_resource(Self, Int) -> Result[Bool, V8Error]
 
 pub struct RuntimeBuilder {
   // private fields
@@ -250,6 +256,11 @@ pub fn RuntimeImage::load_modules(Self, Array[ModuleSource]) -> Self
 pub fn[T] RuntimeImage::with_runtime(Self, (Runtime) -> Result[T, V8Error]) -> Result[T, V8Error]
 
 type RuntimeImageState
+
+pub struct RuntimeResource {
+  rid : Int
+  name : String
+}
 
 type RuntimeState
 
