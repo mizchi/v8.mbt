@@ -58,6 +58,31 @@ test "invalid snapshot surfaces as err" {
 }
 
 ///|
+test "multiple runtimes can coexist" {
+  let result = match (runtime_new(), runtime_new()) {
+    (Ok(left), Ok(right)) => {
+      let left_value = left.eval_string(
+        "globalThis.answer = 1; globalThis.answer",
+      )
+      let right_value = right.eval_string(
+        "globalThis.answer = 2; globalThis.answer",
+      )
+      let pair = match (left_value, right_value) {
+        (Ok(left_value), Ok(right_value)) => Ok(left_value + ":" + right_value)
+        (Err(err), _) => Err(err)
+        (_, Err(err)) => Err(err)
+      }
+      left.dispose()
+      right.dispose()
+      pair
+    }
+    (Err(err), _) => Err(err)
+    (_, Err(err)) => Err(err)
+  }
+  inspect(result, content="Ok(\"1:2\")")
+}
+
+///|
 test "runtime builder preloads modules before build" {
   let builder = runtime_builder_new().load_module(
     "dep", "export const answer = 41;",
@@ -212,6 +237,149 @@ test "runtime can reject async json op from host" {
 }
 
 ///|
+test "runtime can reject async json op from host with json reason" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_async_json_op("fail_json")
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let promise = runtime.eval_promise_string(
+      "MoonBit.opAsync('fail_json', { answer: 40 }).catch((err) => ({ code: err.code, answer: err.answer }))",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let op = runtime.take_async_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    let rejected = runtime.reject_async_json_op_with_json(
+      op.id,
+      "{\"code\":\"blocked\",\"answer\":40}",
+    )
+    guard rejected is Ok(_) else { return Err(rejected.unwrap_err()) }
+    let reason = promise.unwrap().await_json()
+    guard reason is Ok(_) else { return Err(reason.unwrap_err()) }
+    Ok(op.name + ":" + op.payload_json + ":" + reason.unwrap())
+  })
+  inspect(
+    result,
+    content="Ok(\"fail_json:{\\\"answer\\\":40}:{\\\"code\\\":\\\"blocked\\\",\\\"answer\\\":40}\")",
+  )
+}
+
+///|
+test "runtime can resolve async json op from callback" {
+  let result = with_runtime(fn(runtime) {
+    let base = 40
+    let registered = runtime.register_async_json_callback("add", fn(payload) {
+      if payload == "[20,22]" {
+        "{\"answer\":" + (base + 2).to_string() + "}"
+      } else {
+        "{\"answer\":0}"
+      }
+    })
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let promise = runtime.eval_promise_string(
+      "MoonBit.opAsync('add', [20, 22])",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let op = runtime.take_async_json_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let queued = match op.unwrap() {
+      None => "none"
+      Some(request) => request.name
+    }
+    let value = promise.unwrap().await_json()
+    guard value is Ok(_) else { return Err(value.unwrap_err()) }
+    Ok(queued + ":" + value.unwrap())
+  })
+  inspect(result, content="Ok(\"none:{\\\"answer\\\":42}\")")
+}
+
+///|
+test "runtime can resolve and reject async json op from result callback" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_async_json_result_callback(
+      "add_or_fail",
+      fn(payload) {
+        if payload == "[20,22]" {
+          Ok("{\"answer\":42}")
+        } else {
+          Err("blocked")
+        }
+      },
+    )
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let ok_promise = runtime.eval_promise_string(
+      "MoonBit.opAsync('add_or_fail', [20, 22])",
+    )
+    guard ok_promise is Ok(_) else { return Err(ok_promise.unwrap_err()) }
+    let bad_promise = runtime.eval_promise_string(
+      "MoonBit.opAsync('add_or_fail', [1])",
+    )
+    guard bad_promise is Ok(_) else { return Err(bad_promise.unwrap_err()) }
+    let first = runtime.take_async_json_op()
+    guard first is Ok(_) else { return Err(first.unwrap_err()) }
+    let second = runtime.take_async_json_op()
+    guard second is Ok(_) else { return Err(second.unwrap_err()) }
+    let ok_value = ok_promise.unwrap().await_json()
+    guard ok_value is Ok(_) else { return Err(ok_value.unwrap_err()) }
+    Ok(
+      match (first.unwrap(), second.unwrap()) {
+        (None, None) =>
+          ok_value.unwrap() +
+          ":" +
+          is_err(bad_promise.unwrap().await_json()).to_string()
+        _ => "queued"
+      },
+    )
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}:true\")")
+}
+
+///|
+test "runtime can resolve and reject async json op from result callback with json reason" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_async_json_result_callback_with_json_error(
+      "add_or_fail_json",
+      fn(payload) {
+        if payload == "[20,22]" {
+          Ok("{\"answer\":42}")
+        } else {
+          Err("{\"code\":\"blocked\",\"payload\":[1]}")
+        }
+      },
+    )
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let ok_promise = runtime.eval_promise_string(
+      "MoonBit.opAsync('add_or_fail_json', [20, 22])",
+    )
+    guard ok_promise is Ok(_) else { return Err(ok_promise.unwrap_err()) }
+    let bad_promise = runtime.eval_promise_string(
+      "MoonBit.opAsync('add_or_fail_json', [1]).catch((err) => ({ code: err.code, payload: err.payload[0] }))",
+    )
+    guard bad_promise is Ok(_) else { return Err(bad_promise.unwrap_err()) }
+    let first = runtime.take_async_json_op()
+    guard first is Ok(_) else { return Err(first.unwrap_err()) }
+    let second = runtime.take_async_json_op()
+    guard second is Ok(_) else { return Err(second.unwrap_err()) }
+    let ok_value = ok_promise.unwrap().await_json()
+    guard ok_value is Ok(_) else { return Err(ok_value.unwrap_err()) }
+    let bad_value = bad_promise.unwrap().await_json()
+    guard bad_value is Ok(_) else { return Err(bad_value.unwrap_err()) }
+    Ok(
+      match (first.unwrap(), second.unwrap()) {
+        (None, None) => ok_value.unwrap() + ":" + bad_value.unwrap()
+        _ => "queued"
+      },
+    )
+  })
+  inspect(
+    result,
+    content="Ok(\"{\\\"answer\\\":42}:{\\\"code\\\":\\\"blocked\\\",\\\"payload\\\":1}\")",
+  )
+}
+
+///|
 test "unknown async json op rejects without queueing" {
   let result = with_runtime(fn(runtime) {
     let promise = runtime.eval_promise_string(
@@ -301,6 +469,148 @@ test "runtime can reject async bytes op from host" {
 }
 
 ///|
+test "runtime can reject async bytes op from host with json reason" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_async_bytes_op("fail_bytes_json")
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let promise = runtime.eval_promise_string(
+      "MoonBit.opAsyncBytes('fail_bytes_json', new Uint8Array([65, 66])).catch((err) => ({ code: err.code, detail: err.detail }))",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let op = runtime.take_async_bytes_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let op = match op.unwrap() {
+      Some(op) => op
+      None => return Ok("missing")
+    }
+    let rejected = runtime.reject_async_bytes_op_with_json(
+      op.id,
+      "{\"code\":\"blocked\",\"detail\":\"AB\"}",
+    )
+    guard rejected is Ok(_) else { return Err(rejected.unwrap_err()) }
+    let reason = promise.unwrap().await_json()
+    guard reason is Ok(_) else { return Err(reason.unwrap_err()) }
+    Ok(op.name + ":" + @utf8.decode_lossy(op.payload) + ":" + reason.unwrap())
+  })
+  inspect(
+    result,
+    content="Ok(\"fail_bytes_json:AB:{\\\"code\\\":\\\"blocked\\\",\\\"detail\\\":\\\"AB\\\"}\")",
+  )
+}
+
+///|
+test "runtime can resolve async bytes op from callback" {
+  let result = with_runtime(fn(runtime) {
+    let suffix = @utf8.encode("!")
+    let registered = runtime.register_async_bytes_callback("decorate", fn(
+      payload,
+    ) {
+      @utf8.encode(@utf8.decode_lossy(payload) + @utf8.decode_lossy(suffix))
+    })
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let promise = runtime.eval_promise_string(
+      "MoonBit.opAsyncBytes('decorate', new Uint8Array([65, 66]))",
+    )
+    guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+    let op = runtime.take_async_bytes_op()
+    guard op is Ok(_) else { return Err(op.unwrap_err()) }
+    let queued = match op.unwrap() {
+      None => "none"
+      Some(request) => request.name
+    }
+    let value = promise.unwrap().await_bytes()
+    guard value is Ok(_) else { return Err(value.unwrap_err()) }
+    Ok(queued + ":" + @utf8.decode_lossy(value.unwrap()))
+  })
+  inspect(result, content="Ok(\"none:AB!\")")
+}
+
+///|
+test "runtime can resolve and reject async bytes op from result callback" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_async_bytes_result_callback(
+      "decorate_or_fail",
+      fn(payload) {
+        if @utf8.decode_lossy(payload) == "AB" {
+          Ok(@utf8.encode("AB!"))
+        } else {
+          Err("blocked")
+        }
+      },
+    )
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let ok_promise = runtime.eval_promise_string(
+      "MoonBit.opAsyncBytes('decorate_or_fail', new Uint8Array([65, 66]))",
+    )
+    guard ok_promise is Ok(_) else { return Err(ok_promise.unwrap_err()) }
+    let bad_promise = runtime.eval_promise_string(
+      "MoonBit.opAsyncBytes('decorate_or_fail', new Uint8Array([90]))",
+    )
+    guard bad_promise is Ok(_) else { return Err(bad_promise.unwrap_err()) }
+    let first = runtime.take_async_bytes_op()
+    guard first is Ok(_) else { return Err(first.unwrap_err()) }
+    let second = runtime.take_async_bytes_op()
+    guard second is Ok(_) else { return Err(second.unwrap_err()) }
+    let ok_value = ok_promise.unwrap().await_bytes()
+    guard ok_value is Ok(_) else { return Err(ok_value.unwrap_err()) }
+    Ok(
+      match (first.unwrap(), second.unwrap()) {
+        (None, None) =>
+          @utf8.decode_lossy(ok_value.unwrap()) +
+          ":" +
+          is_err(bad_promise.unwrap().await_bytes()).to_string()
+        _ => "queued"
+      },
+    )
+  })
+  inspect(result, content="Ok(\"AB!:true\")")
+}
+
+///|
+test "runtime can resolve and reject async bytes op from result callback with json reason" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_async_bytes_result_callback_with_json_error(
+      "decorate_or_fail_json",
+      fn(payload) {
+        if @utf8.decode_lossy(payload) == "AB" {
+          Ok(@utf8.encode("AB!"))
+        } else {
+          Err("{\"code\":\"blocked\",\"detail\":\"Z\"}")
+        }
+      },
+    )
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let ok_promise = runtime.eval_promise_string(
+      "MoonBit.opAsyncBytes('decorate_or_fail_json', new Uint8Array([65, 66]))",
+    )
+    guard ok_promise is Ok(_) else { return Err(ok_promise.unwrap_err()) }
+    let bad_promise = runtime.eval_promise_string(
+      "MoonBit.opAsyncBytes('decorate_or_fail_json', new Uint8Array([90])).catch((err) => ({ code: err.code, detail: err.detail }))",
+    )
+    guard bad_promise is Ok(_) else { return Err(bad_promise.unwrap_err()) }
+    let first = runtime.take_async_bytes_op()
+    guard first is Ok(_) else { return Err(first.unwrap_err()) }
+    let second = runtime.take_async_bytes_op()
+    guard second is Ok(_) else { return Err(second.unwrap_err()) }
+    let ok_value = ok_promise.unwrap().await_bytes()
+    guard ok_value is Ok(_) else { return Err(ok_value.unwrap_err()) }
+    let bad_value = bad_promise.unwrap().await_json()
+    guard bad_value is Ok(_) else { return Err(bad_value.unwrap_err()) }
+    Ok(
+      match (first.unwrap(), second.unwrap()) {
+        (None, None) =>
+          @utf8.decode_lossy(ok_value.unwrap()) + ":" + bad_value.unwrap()
+        _ => "queued"
+      },
+    )
+  })
+  inspect(
+    result,
+    content="Ok(\"AB!:{\\\"code\\\":\\\"blocked\\\",\\\"detail\\\":\\\"Z\\\"}\")",
+  )
+}
+
+///|
 test "unknown async bytes op rejects without queueing" {
   let result = with_runtime(fn(runtime) {
     let promise = runtime.eval_promise_string(
@@ -376,6 +686,73 @@ test "runtime can resolve sync json op from callback" {
     Ok(value.unwrap() + ":" + op.name + ":" + op.payload_json)
   })
   inspect(result, content="Ok(\"{\\\"answer\\\":42}:add:[20,22]\")")
+}
+
+///|
+test "runtime can resolve and throw sync json op from result callback" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_sync_json_result_callback("add_or_fail", fn(
+      payload,
+    ) {
+      if payload == "[20,22]" {
+        Ok("{\"answer\":42}")
+      } else {
+        Err("blocked")
+      }
+    })
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let ok_value = runtime.eval_json("MoonBit.opSync('add_or_fail', [20, 22])")
+    guard ok_value is Ok(_) else { return Err(ok_value.unwrap_err()) }
+    let bad_value = runtime.eval_json("MoonBit.opSync('add_or_fail', [1])")
+    let first = runtime.take_sync_json_op()
+    guard first is Ok(_) else { return Err(first.unwrap_err()) }
+    let second = runtime.take_sync_json_op()
+    guard second is Ok(_) else { return Err(second.unwrap_err()) }
+    Ok(
+      match (first.unwrap(), second.unwrap()) {
+        (Some(first), Some(second)) =>
+          ok_value.unwrap() +
+          ":" +
+          first.name +
+          ":" +
+          second.payload_json +
+          ":" +
+          is_err(bad_value).to_string()
+        _ => "missing"
+      },
+    )
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}:add_or_fail:[1]:true\")")
+}
+
+///|
+test "runtime can resolve and throw structured json error from sync json result callback" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_sync_json_result_callback_with_json_error(
+      "add_or_fail_json",
+      fn(payload) {
+        if payload == "[20,22]" {
+          Ok("{\"answer\":42}")
+        } else {
+          Err("{\"code\":\"blocked\",\"payload\":[1]}")
+        }
+      },
+    )
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let ok_value = runtime.eval_json(
+      "MoonBit.opSync('add_or_fail_json', [20, 22])",
+    )
+    guard ok_value is Ok(_) else { return Err(ok_value.unwrap_err()) }
+    let thrown = runtime.eval_json(
+      "(() => { try { MoonBit.opSync('add_or_fail_json', [1]) } catch (err) { return { code: err.code, payload: err.payload[0] } } })()",
+    )
+    guard thrown is Ok(_) else { return Err(thrown.unwrap_err()) }
+    Ok(ok_value.unwrap() + ":" + thrown.unwrap())
+  })
+  inspect(
+    result,
+    content="Ok(\"{\\\"answer\\\":42}:{\\\"code\\\":\\\"blocked\\\",\\\"payload\\\":1}\")",
+  )
 }
 
 ///|
@@ -486,6 +863,78 @@ test "runtime can resolve sync bytes op from callback" {
     )
   })
   inspect(result, content="Ok(\"AB!:decorate:AB\")")
+}
+
+///|
+test "runtime can resolve and throw sync bytes op from result callback" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_sync_bytes_result_callback(
+      "decorate_or_fail",
+      fn(payload) {
+        if @utf8.decode_lossy(payload) == "AB" {
+          Ok(@utf8.encode("AB!"))
+        } else {
+          Err("blocked")
+        }
+      },
+    )
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let ok_value = runtime.eval_bytes(
+      "MoonBit.opSyncBytes('decorate_or_fail', new Uint8Array([65, 66]))",
+    )
+    guard ok_value is Ok(_) else { return Err(ok_value.unwrap_err()) }
+    let bad_value = runtime.eval_bytes(
+      "MoonBit.opSyncBytes('decorate_or_fail', new Uint8Array([90]))",
+    )
+    let first = runtime.take_sync_bytes_op()
+    guard first is Ok(_) else { return Err(first.unwrap_err()) }
+    let second = runtime.take_sync_bytes_op()
+    guard second is Ok(_) else { return Err(second.unwrap_err()) }
+    Ok(
+      match (first.unwrap(), second.unwrap()) {
+        (Some(first), Some(second)) =>
+          @utf8.decode_lossy(ok_value.unwrap()) +
+          ":" +
+          first.name +
+          ":" +
+          @utf8.decode_lossy(second.payload) +
+          ":" +
+          is_err(bad_value).to_string()
+        _ => "missing"
+      },
+    )
+  })
+  inspect(result, content="Ok(\"AB!:decorate_or_fail:Z:true\")")
+}
+
+///|
+test "runtime can resolve and throw structured json error from sync bytes result callback" {
+  let result = with_runtime(fn(runtime) {
+    let registered = runtime.register_sync_bytes_result_callback_with_json_error(
+      "decorate_or_fail_json",
+      fn(payload) {
+        if @utf8.decode_lossy(payload) == "AB" {
+          Ok(@utf8.encode("AB!"))
+        } else {
+          Err("{\"code\":\"blocked\",\"detail\":\"Z\"}")
+        }
+      },
+    )
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let ok_value = runtime.eval_bytes(
+      "MoonBit.opSyncBytes('decorate_or_fail_json', new Uint8Array([65, 66]))",
+    )
+    guard ok_value is Ok(_) else { return Err(ok_value.unwrap_err()) }
+    let thrown = runtime.eval_json(
+      "(() => { try { MoonBit.opSyncBytes('decorate_or_fail_json', new Uint8Array([90])) } catch (err) { return { code: err.code, detail: err.detail } } })()",
+    )
+    guard thrown is Ok(_) else { return Err(thrown.unwrap_err()) }
+    Ok(@utf8.decode_lossy(ok_value.unwrap()) + ":" + thrown.unwrap())
+  })
+  inspect(
+    result,
+    content="Ok(\"AB!:{\\\"code\\\":\\\"blocked\\\",\\\"detail\\\":\\\"Z\\\"}\")",
+  )
 }
 
 ///|

@@ -6,7 +6,6 @@ use std::panic::{self, AssertUnwindSafe};
 use std::ptr;
 use std::rc::Rc;
 use std::slice;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
 
 type MoonBitBytes = *mut u8;
@@ -86,10 +85,12 @@ struct OpStore {
     sync_bytes_op_responses: HashMap<(String, Vec<u8>), VecDeque<Vec<u8>>>,
     next_sync_bytes_op_id: u64,
     registered_async_json_ops: HashSet<String>,
+    async_json_callbacks: HashMap<String, RegisteredMoonBitBytesCallback>,
     queued_async_json_op_ids: VecDeque<u64>,
     pending_async_json_ops: HashMap<u64, PendingAsyncJsonOp>,
     next_async_json_op_id: u64,
     registered_async_bytes_ops: HashSet<String>,
+    async_bytes_callbacks: HashMap<String, RegisteredMoonBitBytesCallback>,
     queued_async_bytes_op_ids: VecDeque<u64>,
     pending_async_bytes_ops: HashMap<u64, PendingAsyncBytesOp>,
     next_async_bytes_op_id: u64,
@@ -107,16 +108,55 @@ impl Drop for OpStore {
                 unsafe { moonbit_decref(callback.closure) };
             }
         }
+        for callback in self.async_json_callbacks.values() {
+            if !callback.closure.is_null() {
+                unsafe { moonbit_decref(callback.closure) };
+            }
+        }
+        for callback in self.async_bytes_callbacks.values() {
+            if !callback.closure.is_null() {
+                unsafe { moonbit_decref(callback.closure) };
+            }
+        }
     }
 }
 
 static INIT_V8: Once = Once::new();
-static ACTIVE_RUNTIME: AtomicBool = AtomicBool::new(false);
 const MAIN_MODULE_SPECIFIER: &str = "file:///main.mjs";
 const MAIN_SCRIPT_RESOURCE_NAME: &str = "file:///main.js";
 const PROMISE_STATE_PENDING: i32 = 0;
 const PROMISE_STATE_FULFILLED: i32 = 1;
 const PROMISE_STATE_REJECTED: i32 = 2;
+
+struct EnteredIsolateGuard {
+    isolate: *mut v8::OwnedIsolate,
+}
+
+impl EnteredIsolateGuard {
+    fn new(isolate: &mut v8::OwnedIsolate) -> Self {
+        unsafe {
+            isolate.enter();
+        }
+        Self {
+            isolate: isolate as *mut _,
+        }
+    }
+}
+
+impl Drop for EnteredIsolateGuard {
+    fn drop(&mut self) {
+        unsafe {
+            (*self.isolate).exit();
+        }
+    }
+}
+
+macro_rules! entered_scope {
+    ($isolate:expr, $scope:ident) => {
+        let _entered_isolate = EnteredIsolateGuard::new($isolate);
+        v8::scope!(let $scope, $isolate);
+    };
+}
 
 fn ensure_v8() {
     INIT_V8.call_once(|| {
@@ -197,10 +237,36 @@ unsafe fn copy_bytes_from_moonbit(bytes: MoonBitBytes) -> Vec<u8> {
     unsafe { slice::from_raw_parts(bytes.cast::<u8>(), len) }.to_vec()
 }
 
+enum MoonBitCallbackError {
+    Message(String),
+    Json(String),
+}
+
+enum MoonBitCallbackEnvelope {
+    Ok(Vec<u8>),
+    Err(MoonBitCallbackError),
+}
+
+fn decode_moonbit_callback_envelope(bytes: Vec<u8>) -> Result<MoonBitCallbackEnvelope, String> {
+    let Some((&tag, payload)) = bytes.split_first() else {
+        return Err("callback returned empty response envelope".to_string());
+    };
+    match tag {
+        0 => Ok(MoonBitCallbackEnvelope::Ok(payload.to_vec())),
+        1 => String::from_utf8(payload.to_vec())
+            .map(|message| MoonBitCallbackEnvelope::Err(MoonBitCallbackError::Message(message)))
+            .map_err(|_| "callback rejection returned invalid utf-8".to_string()),
+        2 => String::from_utf8(payload.to_vec())
+            .map(|json| MoonBitCallbackEnvelope::Err(MoonBitCallbackError::Json(json)))
+            .map_err(|_| "callback rejection returned invalid utf-8".to_string()),
+        _ => Err("callback returned unknown response envelope".to_string()),
+    }
+}
+
 fn invoke_moonbit_bytes_callback(
     callback: RegisteredMoonBitBytesCallback,
     payload: &[u8],
-) -> Vec<u8> {
+) -> Result<Vec<u8>, MoonBitCallbackError> {
     let input = copy_bytes_to_moonbit(payload);
     unsafe {
         if !input.is_null() {
@@ -211,24 +277,28 @@ fn invoke_moonbit_bytes_callback(
             moonbit_decref(input.cast());
         }
         if output.is_null() {
-            return Vec::new();
+            return Err(MoonBitCallbackError::Message(
+                "callback returned null response".to_string(),
+            ));
         }
         moonbit_incref(output.cast());
         let output_bytes = copy_bytes_from_moonbit(output);
         moonbit_decref(output.cast());
-        output_bytes
+        match decode_moonbit_callback_envelope(output_bytes)
+            .map_err(MoonBitCallbackError::Message)?
+        {
+            MoonBitCallbackEnvelope::Ok(output_bytes) => Ok(output_bytes),
+            MoonBitCallbackEnvelope::Err(error) => Err(error),
+        }
     }
 }
 
 fn invoke_moonbit_json_callback(
     callback: RegisteredMoonBitBytesCallback,
     payload_json: &str,
-) -> Result<String, String> {
-    String::from_utf8(invoke_moonbit_bytes_callback(
-        callback,
-        payload_json.as_bytes(),
-    ))
-    .map_err(|_| "sync json callback returned invalid utf-8".to_string())
+) -> Result<String, MoonBitCallbackError> {
+    String::from_utf8(invoke_moonbit_bytes_callback(callback, payload_json.as_bytes())?)
+        .map_err(|_| MoonBitCallbackError::Message("json callback returned invalid utf-8".to_string()))
 }
 
 fn throw_exception_message<'s>(scope: &mut v8::PinScope<'s, '_>, message: &str) {
@@ -236,6 +306,25 @@ fn throw_exception_message<'s>(scope: &mut v8::PinScope<'s, '_>, message: &str) 
         .or_else(|| v8::String::new(scope, "V8 bridge error"))
         .expect("failed to allocate exception string");
     scope.throw_exception(exception.into());
+}
+
+fn throw_exception_json<'s>(scope: &mut v8::PinScope<'s, '_>, json_text: &str) -> bool {
+    let Some(reason) = parse_json_value(scope, json_text) else {
+        return false;
+    };
+    scope.throw_exception(reason);
+    true
+}
+
+fn throw_callback_error<'s>(scope: &mut v8::PinScope<'s, '_>, error: MoonBitCallbackError) {
+    match error {
+        MoonBitCallbackError::Message(message) => throw_exception_message(scope, &message),
+        MoonBitCallbackError::Json(json) => {
+            if !throw_exception_json(scope, json.as_ref()) {
+                throw_exception_message(scope, "failed to parse callback rejection json");
+            }
+        }
+    }
 }
 
 fn reject_promise_with_message<'s>(
@@ -248,6 +337,32 @@ fn reject_promise_with_message<'s>(
         .expect("failed to allocate rejection string");
     let _ = resolver.reject(scope, reason.into());
     resolver.get_promise(scope)
+}
+
+fn reject_promise_with_json<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    resolver: v8::Local<'s, v8::PromiseResolver>,
+    json_text: &str,
+) -> Option<v8::Local<'s, v8::Promise>> {
+    let reason = parse_json_value(scope, json_text)?;
+    let _ = resolver.reject(scope, reason);
+    Some(resolver.get_promise(scope))
+}
+
+fn reject_promise_with_callback_error<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    resolver: v8::Local<'s, v8::PromiseResolver>,
+    error: MoonBitCallbackError,
+) -> v8::Local<'s, v8::Promise> {
+    match error {
+        MoonBitCallbackError::Message(message) => {
+            reject_promise_with_message(scope, resolver, &message)
+        }
+        MoonBitCallbackError::Json(json) => reject_promise_with_json(scope, resolver, json.as_ref())
+            .unwrap_or_else(|| {
+                reject_promise_with_message(scope, resolver, "failed to parse callback rejection json")
+            }),
+    }
 }
 
 fn split_specifier_prefix(specifier: &str) -> (&str, &str) {
@@ -780,6 +895,37 @@ fn async_json_op_callback<'s>(
         }
     };
 
+    let callback = {
+        let ops_ref = ops.borrow();
+        ops_ref.async_json_callbacks.get(&op_name).copied()
+    };
+    if let Some(callback) = callback {
+        let response_json = match invoke_moonbit_json_callback(callback, payload_json.as_ref()) {
+            Ok(response_json) => response_json,
+            Err(error) => {
+                rv.set(reject_promise_with_callback_error(scope, resolver, error).into());
+                return;
+            }
+        };
+        let value = match parse_json_value(scope, response_json.as_ref()) {
+            Some(value) => value,
+            None => {
+                rv.set(
+                    reject_promise_with_message(
+                        scope,
+                        resolver,
+                        "failed to parse async json callback response",
+                    )
+                    .into(),
+                );
+                return;
+            }
+        };
+        let _ = resolver.resolve(scope, value);
+        rv.set(promise.into());
+        return;
+    }
+
     let mut ops_ref = ops.borrow_mut();
     let op_id = next_async_json_op_id(&mut ops_ref);
     ops_ref.queued_async_json_op_ids.push_back(op_id);
@@ -889,8 +1035,8 @@ fn sync_json_op_callback<'s>(
         SyncJsonResponse::Callback(callback) => {
             match invoke_moonbit_json_callback(callback, payload_json.as_ref()) {
                 Ok(response_json) => response_json,
-                Err(message) => {
-                    throw_exception_message(scope, &message);
+                Err(error) => {
+                    throw_callback_error(scope, error);
                     return;
                 }
             }
@@ -1006,7 +1152,13 @@ fn sync_bytes_op_callback<'s>(
     };
 
     let response = match response {
-        SyncBytesResponse::Callback(callback) => invoke_moonbit_bytes_callback(callback, &payload),
+        SyncBytesResponse::Callback(callback) => match invoke_moonbit_bytes_callback(callback, &payload) {
+            Ok(response) => response,
+            Err(error) => {
+                throw_callback_error(scope, error);
+                return;
+            }
+        },
         SyncBytesResponse::Preloaded(response) => response,
     };
 
@@ -1099,6 +1251,37 @@ fn async_bytes_op_callback<'s>(
         }
     };
 
+    let callback = {
+        let ops_ref = ops.borrow();
+        ops_ref.async_bytes_callbacks.get(&op_name).copied()
+    };
+    if let Some(callback) = callback {
+        let response = match invoke_moonbit_bytes_callback(callback, &payload) {
+            Ok(response) => response,
+            Err(error) => {
+                rv.set(reject_promise_with_callback_error(scope, resolver, error).into());
+                return;
+            }
+        };
+        let value = match make_uint8_array_from_bytes(scope, &response) {
+            Some(value) => value,
+            None => {
+                rv.set(
+                    reject_promise_with_message(
+                        scope,
+                        resolver,
+                        "failed to allocate async bytes callback response",
+                    )
+                    .into(),
+                );
+                return;
+            }
+        };
+        let _ = resolver.resolve(scope, value.into());
+        rv.set(promise.into());
+        return;
+    }
+
     let mut ops_ref = ops.borrow_mut();
     let op_id = next_async_bytes_op_id(&mut ops_ref);
     ops_ref.queued_async_bytes_op_ids.push_back(op_id);
@@ -1129,6 +1312,9 @@ fn create_runtime_handle(mut isolate: v8::OwnedIsolate) -> u64 {
         }
         v8::Global::new(scope, context)
     };
+    unsafe {
+        isolate.exit();
+    }
     let runtime = Box::new(Runtime {
         context,
         isolate,
@@ -1201,7 +1387,7 @@ fn eval_promise_from_source(
         next_promise_handle,
         ..
     } = runtime;
-    v8::scope!(let scope, isolate);
+    entered_scope!(isolate, scope);
     let context = v8::Local::new(scope, &*context);
     let context_scope = &mut v8::ContextScope::new(scope, context);
     let mut try_catch = v8::TryCatch::new(context_scope);
@@ -1318,7 +1504,7 @@ fn eval_module_handle_from_source(
         next_module_handle,
         ..
     } = runtime;
-    v8::scope!(let scope, isolate);
+    entered_scope!(isolate, scope);
     let context = v8::Local::new(scope, &*context);
     let context_scope = &mut v8::ContextScope::new(scope, context);
     let mut try_catch = v8::TryCatch::new(context_scope);
@@ -1433,7 +1619,7 @@ fn eval_module_handle_async_from_source(
         next_promise_handle,
         ..
     } = runtime;
-    v8::scope!(let scope, isolate);
+    entered_scope!(isolate, scope);
     let context = v8::Local::new(scope, &*context);
     let context_scope = &mut v8::ContextScope::new(scope, context);
     let mut try_catch = v8::TryCatch::new(context_scope);
@@ -1646,10 +1832,6 @@ pub extern "C" fn moonbit_v8_version_bytes() -> MoonBitBytes {
 #[no_mangle]
 pub extern "C" fn moonbit_v8_runtime_new(error_out: *mut u8) -> u64 {
     clear_error(error_out);
-    if ACTIVE_RUNTIME.swap(true, Ordering::SeqCst) {
-        set_error(error_out, "only one active runtime is supported for now");
-        return 0;
-    }
 
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
         ensure_v8();
@@ -1657,15 +1839,8 @@ pub extern "C" fn moonbit_v8_runtime_new(error_out: *mut u8) -> u64 {
     }));
 
     match result {
-        Ok(handle) => {
-            if handle == 0 || !error_out.is_null() && unsafe { !read_raw_ptr(error_out).is_null() }
-            {
-                ACTIVE_RUNTIME.store(false, Ordering::SeqCst);
-            }
-            handle
-        }
+        Ok(handle) => handle,
         Err(payload) => {
-            ACTIVE_RUNTIME.store(false, Ordering::SeqCst);
             set_error(error_out, &panic_message(payload));
             0
         }
@@ -1679,10 +1854,6 @@ pub extern "C" fn moonbit_v8_runtime_new_with_snapshot(
     error_out: *mut u8,
 ) -> u64 {
     clear_error(error_out);
-    if ACTIVE_RUNTIME.swap(true, Ordering::SeqCst) {
-        set_error(error_out, "only one active runtime is supported for now");
-        return 0;
-    }
 
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
         ensure_v8();
@@ -1703,15 +1874,8 @@ pub extern "C" fn moonbit_v8_runtime_new_with_snapshot(
     }));
 
     match result {
-        Ok(handle) => {
-            if handle == 0 || !error_out.is_null() && unsafe { !read_raw_ptr(error_out).is_null() }
-            {
-                ACTIVE_RUNTIME.store(false, Ordering::SeqCst);
-            }
-            handle
-        }
+        Ok(handle) => handle,
         Err(payload) => {
-            ACTIVE_RUNTIME.store(false, Ordering::SeqCst);
             set_error(error_out, &panic_message(payload));
             0
         }
@@ -1806,9 +1970,9 @@ pub extern "C" fn moonbit_v8_runtime_delete(handle: u64) {
 
     let runtime = handle as usize as *mut Runtime;
     let _ = panic::catch_unwind(AssertUnwindSafe(|| unsafe {
+        (*runtime).isolate.enter();
         drop(Box::from_raw(runtime));
     }));
-    ACTIVE_RUNTIME.store(false, Ordering::SeqCst);
 }
 
 #[no_mangle]
@@ -2447,6 +2611,64 @@ pub extern "C" fn moonbit_v8_runtime_register_async_json_op(
 }
 
 #[no_mangle]
+pub extern "C" fn moonbit_v8_runtime_register_async_json_callback(
+    handle: u64,
+    name: *const u8,
+    name_len: i32,
+    callback: MoonBitBytesCallback,
+    closure: *mut c_void,
+    error_out: *mut u8,
+) {
+    clear_error(error_out);
+
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        if handle == 0 {
+            if !closure.is_null() {
+                unsafe { moonbit_decref(closure) };
+            }
+            set_error(error_out, "runtime handle is null");
+            return;
+        }
+        if name.is_null() || name_len < 0 {
+            if !closure.is_null() {
+                unsafe { moonbit_decref(closure) };
+            }
+            set_error(error_out, "op name buffer is invalid");
+            return;
+        }
+
+        let runtime = unsafe { &mut *(handle as usize as *mut Runtime) };
+        let name = unsafe { slice::from_raw_parts(name, name_len as usize) };
+        let name = String::from_utf8_lossy(name).to_string();
+        if name.is_empty() {
+            if !closure.is_null() {
+                unsafe { moonbit_decref(closure) };
+            }
+            set_error(error_out, "op name must not be empty");
+            return;
+        }
+
+        let mut ops = runtime.ops.borrow_mut();
+        if let Some(previous) = ops.async_json_callbacks.insert(
+            name.clone(),
+            RegisteredMoonBitBytesCallback { callback, closure },
+        ) {
+            if !previous.closure.is_null() {
+                unsafe { moonbit_decref(previous.closure) };
+            }
+        }
+        ops.registered_async_json_ops.insert(name);
+    }));
+
+    if let Err(payload) = result {
+        if !closure.is_null() {
+            unsafe { moonbit_decref(closure) };
+        }
+        set_error(error_out, &panic_message(payload));
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn moonbit_v8_runtime_take_async_json_op(handle: u64, error_out: *mut u8) -> u64 {
     clear_error(error_out);
 
@@ -2586,7 +2808,7 @@ pub extern "C" fn moonbit_v8_runtime_resolve_async_json_op(
             ops,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -2659,7 +2881,7 @@ pub extern "C" fn moonbit_v8_runtime_reject_async_json_op(
             ops,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -2689,6 +2911,78 @@ pub extern "C" fn moonbit_v8_runtime_reject_async_json_op(
             }
         };
         let _ = resolver.reject(try_catch, reason.into());
+        ops.borrow_mut().pending_async_json_ops.remove(&op_id);
+    }));
+
+    if let Err(payload) = result {
+        set_error(error_out, &panic_message(payload));
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn moonbit_v8_runtime_reject_async_json_op_with_json(
+    handle: u64,
+    op_id: u64,
+    error_json: *const u8,
+    error_json_len: i32,
+    error_out: *mut u8,
+) {
+    clear_error(error_out);
+
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        if handle == 0 {
+            set_error(error_out, "runtime handle is null");
+            return;
+        }
+        if op_id == 0 {
+            set_error(error_out, "async json op id is invalid");
+            return;
+        }
+        if error_json.is_null() || error_json_len < 0 {
+            set_error(error_out, "rejection json buffer is invalid");
+            return;
+        }
+
+        let runtime = unsafe { &mut *(handle as usize as *mut Runtime) };
+        let error_json = unsafe { slice::from_raw_parts(error_json, error_json_len as usize) };
+        let error_json = String::from_utf8_lossy(error_json).to_string();
+
+        let Runtime {
+            context,
+            isolate,
+            ops,
+            ..
+        } = runtime;
+        entered_scope!(isolate, scope);
+        let context = v8::Local::new(scope, &*context);
+        let context_scope = &mut v8::ContextScope::new(scope, context);
+        let mut try_catch = v8::TryCatch::new(context_scope);
+        let mut try_catch = {
+            let try_catch_pinned = unsafe { std::pin::Pin::new_unchecked(&mut try_catch) };
+            try_catch_pinned.init()
+        };
+        let try_catch = &mut try_catch;
+
+        let resolver = {
+            let ops_ref = ops.borrow();
+            match ops_ref.pending_async_json_ops.get(&op_id) {
+                Some(op) => op.resolver.clone(),
+                None => {
+                    set_error(error_out, "async json op is closed");
+                    return;
+                }
+            }
+        };
+
+        let reason = match parse_json_value(try_catch, error_json.as_ref()) {
+            Some(reason) => reason,
+            None => {
+                set_error(error_out, "failed to parse rejection json");
+                return;
+            }
+        };
+        let resolver = v8::Local::new(try_catch, &resolver);
+        let _ = resolver.reject(try_catch, reason);
         ops.borrow_mut().pending_async_json_ops.remove(&op_id);
     }));
 
@@ -2732,6 +3026,64 @@ pub extern "C" fn moonbit_v8_runtime_register_async_bytes_op(
     }));
 
     if let Err(payload) = result {
+        set_error(error_out, &panic_message(payload));
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn moonbit_v8_runtime_register_async_bytes_callback(
+    handle: u64,
+    name: *const u8,
+    name_len: i32,
+    callback: MoonBitBytesCallback,
+    closure: *mut c_void,
+    error_out: *mut u8,
+) {
+    clear_error(error_out);
+
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        if handle == 0 {
+            if !closure.is_null() {
+                unsafe { moonbit_decref(closure) };
+            }
+            set_error(error_out, "runtime handle is null");
+            return;
+        }
+        if name.is_null() || name_len < 0 {
+            if !closure.is_null() {
+                unsafe { moonbit_decref(closure) };
+            }
+            set_error(error_out, "op name buffer is invalid");
+            return;
+        }
+
+        let runtime = unsafe { &mut *(handle as usize as *mut Runtime) };
+        let name = unsafe { slice::from_raw_parts(name, name_len as usize) };
+        let name = String::from_utf8_lossy(name).to_string();
+        if name.is_empty() {
+            if !closure.is_null() {
+                unsafe { moonbit_decref(closure) };
+            }
+            set_error(error_out, "op name must not be empty");
+            return;
+        }
+
+        let mut ops = runtime.ops.borrow_mut();
+        if let Some(previous) = ops.async_bytes_callbacks.insert(
+            name.clone(),
+            RegisteredMoonBitBytesCallback { callback, closure },
+        ) {
+            if !previous.closure.is_null() {
+                unsafe { moonbit_decref(previous.closure) };
+            }
+        }
+        ops.registered_async_bytes_ops.insert(name);
+    }));
+
+    if let Err(payload) = result {
+        if !closure.is_null() {
+            unsafe { moonbit_decref(closure) };
+        }
         set_error(error_out, &panic_message(payload));
     }
 }
@@ -2876,7 +3228,7 @@ pub extern "C" fn moonbit_v8_runtime_resolve_async_bytes_op(
             ops,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -2949,7 +3301,7 @@ pub extern "C" fn moonbit_v8_runtime_reject_async_bytes_op(
             ops,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -2979,6 +3331,78 @@ pub extern "C" fn moonbit_v8_runtime_reject_async_bytes_op(
             }
         };
         let _ = resolver.reject(try_catch, reason.into());
+        ops.borrow_mut().pending_async_bytes_ops.remove(&op_id);
+    }));
+
+    if let Err(payload) = result {
+        set_error(error_out, &panic_message(payload));
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn moonbit_v8_runtime_reject_async_bytes_op_with_json(
+    handle: u64,
+    op_id: u64,
+    error_json: *const u8,
+    error_json_len: i32,
+    error_out: *mut u8,
+) {
+    clear_error(error_out);
+
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        if handle == 0 {
+            set_error(error_out, "runtime handle is null");
+            return;
+        }
+        if op_id == 0 {
+            set_error(error_out, "async bytes op id is invalid");
+            return;
+        }
+        if error_json.is_null() || error_json_len < 0 {
+            set_error(error_out, "rejection json buffer is invalid");
+            return;
+        }
+
+        let runtime = unsafe { &mut *(handle as usize as *mut Runtime) };
+        let error_json = unsafe { slice::from_raw_parts(error_json, error_json_len as usize) };
+        let error_json = String::from_utf8_lossy(error_json).to_string();
+
+        let Runtime {
+            context,
+            isolate,
+            ops,
+            ..
+        } = runtime;
+        entered_scope!(isolate, scope);
+        let context = v8::Local::new(scope, &*context);
+        let context_scope = &mut v8::ContextScope::new(scope, context);
+        let mut try_catch = v8::TryCatch::new(context_scope);
+        let mut try_catch = {
+            let try_catch_pinned = unsafe { std::pin::Pin::new_unchecked(&mut try_catch) };
+            try_catch_pinned.init()
+        };
+        let try_catch = &mut try_catch;
+
+        let resolver = {
+            let ops_ref = ops.borrow();
+            match ops_ref.pending_async_bytes_ops.get(&op_id) {
+                Some(op) => op.resolver.clone(),
+                None => {
+                    set_error(error_out, "async bytes op is closed");
+                    return;
+                }
+            }
+        };
+
+        let reason = match parse_json_value(try_catch, error_json.as_ref()) {
+            Some(reason) => reason,
+            None => {
+                set_error(error_out, "failed to parse rejection json");
+                return;
+            }
+        };
+        let resolver = v8::Local::new(try_catch, &resolver);
+        let _ = resolver.reject(try_catch, reason);
         ops.borrow_mut().pending_async_bytes_ops.remove(&op_id);
     }));
 
@@ -3022,7 +3446,7 @@ pub extern "C" fn moonbit_v8_runtime_set_global_json(
         let json = unsafe { slice::from_raw_parts(json, json_len as usize) };
         let json = String::from_utf8_lossy(json);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -3107,7 +3531,7 @@ pub extern "C" fn moonbit_v8_runtime_get_global_json(
             return empty_bytes();
         }
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -3206,7 +3630,7 @@ pub extern "C" fn moonbit_v8_runtime_set_global_bytes(
         }
         let bytes = unsafe { slice::from_raw_parts(bytes, bytes_len as usize) };
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -3291,7 +3715,7 @@ pub extern "C" fn moonbit_v8_runtime_get_global_bytes(
             return empty_bytes();
         }
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -3390,7 +3814,7 @@ pub extern "C" fn moonbit_v8_runtime_call_global_bytes(
         }
         let bytes = unsafe { slice::from_raw_parts(bytes, bytes_len as usize) };
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -3558,7 +3982,7 @@ pub extern "C" fn moonbit_v8_runtime_call_global_json(
         let args_json = unsafe { slice::from_raw_parts(args_json, args_json_len as usize) };
         let args_json = String::from_utf8_lossy(args_json);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -3738,7 +4162,7 @@ pub extern "C" fn moonbit_v8_runtime_eval(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -3829,7 +4253,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_json(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -3920,7 +4344,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_bytes(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -4064,7 +4488,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_with_name(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -4167,7 +4591,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_json_with_name(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -4270,7 +4694,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_bytes_with_name(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -4396,7 +4820,7 @@ pub extern "C" fn moonbit_v8_runtime_perform_microtask_checkpoint(handle: u64, e
         }
 
         let runtime = unsafe { &mut *(handle as usize as *mut Runtime) };
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let scope = &mut v8::ContextScope::new(scope, context);
         scope.perform_microtask_checkpoint();
@@ -4432,7 +4856,7 @@ pub extern "C" fn moonbit_v8_runtime_promise_state(
             promises,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let promise_global = match promises.get(&promise_handle) {
@@ -4480,7 +4904,7 @@ pub extern "C" fn moonbit_v8_runtime_promise_result(
             promises,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -4547,7 +4971,7 @@ pub extern "C" fn moonbit_v8_runtime_promise_result_json(
             promises,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -4618,7 +5042,7 @@ pub extern "C" fn moonbit_v8_runtime_promise_result_bytes(
             promises,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -4696,7 +5120,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_async(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -4830,7 +5254,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_async_json(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -4967,7 +5391,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_async_bytes(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -5114,7 +5538,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_async_with_name(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -5260,7 +5684,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_async_json_with_name(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -5409,7 +5833,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_async_bytes_with_name(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -5542,7 +5966,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_module(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -5735,7 +6159,7 @@ pub extern "C" fn moonbit_v8_runtime_eval_module_with_specifier(
         let source = unsafe { slice::from_raw_parts(source, source_len as usize) };
         let source = String::from_utf8_lossy(source);
 
-        v8::scope!(let scope, &mut runtime.isolate);
+        entered_scope!(&mut runtime.isolate, scope);
         let context = v8::Local::new(scope, &runtime.context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -6070,7 +6494,7 @@ pub extern "C" fn moonbit_v8_runtime_module_get_export_json(
             module_handles,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -6140,7 +6564,7 @@ pub extern "C" fn moonbit_v8_runtime_module_export_names(
             module_handles,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -6236,7 +6660,7 @@ pub extern "C" fn moonbit_v8_runtime_module_get_export_bytes(
             module_handles,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -6326,7 +6750,7 @@ pub extern "C" fn moonbit_v8_runtime_module_call_export_json(
             module_handles,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);
@@ -6524,7 +6948,7 @@ pub extern "C" fn moonbit_v8_runtime_module_call_export_bytes(
             module_handles,
             ..
         } = runtime;
-        v8::scope!(let scope, isolate);
+        entered_scope!(isolate, scope);
         let context = v8::Local::new(scope, &*context);
         let context_scope = &mut v8::ContextScope::new(scope, context);
         let mut try_catch = v8::TryCatch::new(context_scope);

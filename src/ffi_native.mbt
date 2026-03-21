@@ -183,6 +183,18 @@ extern "C" fn runtime_register_async_json_op_native(
 ) -> Unit = "moonbit_v8_runtime_register_async_json_op"
 
 ///|
+#borrow(name, error_out)
+#owned(callback)
+extern "C" fn runtime_register_async_json_callback_native(
+  handle : UInt64,
+  name : Bytes,
+  name_len : Int,
+  call_closure : FuncRef[((Bytes) -> Bytes, Bytes) -> Bytes],
+  callback : (Bytes) -> Bytes,
+  error_out : Bytes,
+) -> Unit = "moonbit_v8_runtime_register_async_json_callback"
+
+///|
 #borrow(error_out)
 extern "C" fn runtime_take_async_json_op_native(
   handle : UInt64,
@@ -226,6 +238,16 @@ extern "C" fn runtime_reject_async_json_op_native(
 ) -> Unit = "moonbit_v8_runtime_reject_async_json_op"
 
 ///|
+#borrow(error_json, error_out)
+extern "C" fn runtime_reject_async_json_op_with_json_native(
+  handle : UInt64,
+  op_id : UInt64,
+  error_json : Bytes,
+  error_json_len : Int,
+  error_out : Bytes,
+) -> Unit = "moonbit_v8_runtime_reject_async_json_op_with_json"
+
+///|
 #borrow(name, error_out)
 extern "C" fn runtime_register_async_bytes_op_native(
   handle : UInt64,
@@ -233,6 +255,18 @@ extern "C" fn runtime_register_async_bytes_op_native(
   name_len : Int,
   error_out : Bytes,
 ) -> Unit = "moonbit_v8_runtime_register_async_bytes_op"
+
+///|
+#borrow(name, error_out)
+#owned(callback)
+extern "C" fn runtime_register_async_bytes_callback_native(
+  handle : UInt64,
+  name : Bytes,
+  name_len : Int,
+  call_closure : FuncRef[((Bytes) -> Bytes, Bytes) -> Bytes],
+  callback : (Bytes) -> Bytes,
+  error_out : Bytes,
+) -> Unit = "moonbit_v8_runtime_register_async_bytes_callback"
 
 ///|
 #borrow(error_out)
@@ -276,6 +310,16 @@ extern "C" fn runtime_reject_async_bytes_op_native(
   message_len : Int,
   error_out : Bytes,
 ) -> Unit = "moonbit_v8_runtime_reject_async_bytes_op"
+
+///|
+#borrow(error_json, error_out)
+extern "C" fn runtime_reject_async_bytes_op_with_json_native(
+  handle : UInt64,
+  op_id : UInt64,
+  error_json : Bytes,
+  error_json_len : Int,
+  error_out : Bytes,
+) -> Unit = "moonbit_v8_runtime_reject_async_bytes_op_with_json"
 
 ///|
 #borrow(name, json, error_out)

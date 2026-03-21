@@ -9,6 +9,11 @@ All notable changes to this project should be documented in this file.
 - Property-based test example with `moonbitlang/quickcheck`
 - Package-level `src/README.mbt.md` with executable examples
 - `just ci`, `just ci-all`, `just fmt-check`, and `just info-check`
+- Direct async host callbacks via `register_async_json_callback` and `register_async_bytes_callback`
+- Result-based host callbacks that can throw/reject via `register_*_result_callback`
+- JSON-valued throw/reject reasons via `register_*_result_callback_with_json_error` and `reject_async_*_op_with_json`
+- Multiple runtimes can now coexist in the same process
+- Bundled `src/scripts/setup-consumer.mjs` to automate the common mooncakes consumer setup path
 
 ### Changed
 

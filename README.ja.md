@@ -26,32 +26,20 @@
 
 ```bash
 moon add mizchi/v8
-mkdir -p scripts
-cp .mooncakes/mizchi/v8/docs/examples/mizchi-v8-consumer-prebuild.mjs scripts/
+node .mooncakes/mizchi/v8/src/scripts/setup-consumer.mjs --main-pkg cmd/main/moon.pkg
 moon check --target native
 ```
 
-Moon `0.1.20260309` / MoonBit `v0.8.3` 時点では、dependency 側の native hook は consumer に自動伝播しません。そのため、consumer module 側にも小さい prebuild script を 1 つ置く必要があります。
+Moon `0.1.20260309` / MoonBit `v0.8.3` 時点では、dependency 側の native hook は consumer に自動伝播しません。そこで同梱の setup helper が、よくある mooncakes 利用手順をまとめて処理します。
 
-`moon.mod.json` に次を追加します。
+- `scripts/mizchi-v8-consumer-prebuild.mjs` を配置する
+- `moon.mod.json` に `--moonbit-unstable-prebuild` を追加する
+- 指定した main package に `${build.MIZCHI_V8_CC_LINK_FLAGS}` と `"supported-targets": "native"` を追加する
 
-```json
-{
-  "--moonbit-unstable-prebuild": "scripts/mizchi-v8-consumer-prebuild.mjs"
-}
-```
+main package が別の場所にある場合は明示してください。
 
-そして最終的に native binary を作る package に次を入れます。
-
-```moonbit
-options(
-  "is-main": true,
-  link: {
-    "native": {
-      "cc-link-flags": "${build.MIZCHI_V8_CC_LINK_FLAGS}",
-    },
-  },
-)
+```bash
+node .mooncakes/mizchi/v8/src/scripts/setup-consumer.mjs --main-pkg app/server/moon.pkg
 ```
 
 ### 前提
@@ -60,10 +48,10 @@ options(
 - `bash`
 - `cargo` を含む Rust toolchain
 - native C/C++ toolchain
-- consumer 側 prebuild script 用の `node`
+- 同梱 setup / prebuild script 用の `node`
 - GitHub、crates.io、`rusty_v8` release mirror へアクセスできるネットワーク
 
-公開 package 側でも `postadd` hook で bridge build は走りますが、いまのところ consumer 側の link 設定は別途必要です。
+公開 package 側でも `postadd` hook で bridge build は走ります。consumer module 側の 1 回限りの設定はまだ必要ですが、上の setup script で一般的な mooncakes 導線は自動化できます。
 
 ### ソースから開発する
 
@@ -132,17 +120,17 @@ match @v8.runtime_new() {
 - 非同期 handle: `PromiseHandle`, `ModuleEvalHandle`, `ModuleHandle`
 - bootstrap: `Runtime::load_module`, `RuntimeBuilder`, `SnapshotBuilder`, `RuntimeImage`
 - 値 bridge: `set/get/call_global_json`, `set/get/call_global_bytes`, `eval_json`, `eval_bytes`
-- host bridge: `register_sync_*_callback`, `register_*_op`, `take_*_op`, `resolve_*_op`, `reject_*_op`
+- host bridge: `register_*_callback`, `register_*_result_callback`, `register_*_result_callback_with_json_error`, `register_*_op`, `take_*_op`, `resolve_*_op`, `reject_*_op`, `reject_async_*_op_with_json`
+- direct async callback: `register_async_json_callback`, `register_async_bytes_callback`, `register_async_*_result_callback`
+- 失敗 reason は String に加えて JSON value でも返せます
 
 完全な public surface と追加例は [src/README.mbt.md](src/README.mbt.md) を参照してください。
 
 ## 制約
 
 - native target 専用です
-- 同時に 1 runtime のみ許可しています
-- async host callback surface は未実装です
 - Node / Deno 互換 API ではなく、embedder 向けの低レベル binding を狙っています
-- 現状は consumer 側に小さい module-level prebuild 設定が必要です
+- mooncakes の consumer 側では現在も 1 回限りの setup が必要です
 - local path dependency は `moon add` 時の install hook と同じ挙動にはなりません
 
 ## ドキュメント

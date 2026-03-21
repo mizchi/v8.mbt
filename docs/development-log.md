@@ -55,16 +55,15 @@ This document tracks the implementation status, design notes, and known limitati
 - [x] async bytes op queue
 - [x] sync JSON callback
 - [x] sync bytes callback
-- [ ] async host callback
-- [ ] richer host op surface
+- [x] async host callback
+- [x] richer host op surface
 
 ## Current Limitations
 
 - native target only
-- only one runtime can exist at a time
 - no Node / Deno compatibility layer
-- async host integration is still queue-based because async host callbacks are not implemented
-- consumer modules still need their own prebuild and link glue when importing this package from mooncakes today
+- async host integration can now use queue-based ops, direct callbacks, and result callbacks, and failure reasons can be passed as JSON values as well as plain strings
+- consumer modules still need one-time setup when importing this package from mooncakes today, although the bundled setup script now automates the common path
 
 ## Design Notes
 

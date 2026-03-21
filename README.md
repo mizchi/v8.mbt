@@ -26,32 +26,20 @@
 
 ```bash
 moon add mizchi/v8
-mkdir -p scripts
-cp .mooncakes/mizchi/v8/docs/examples/mizchi-v8-consumer-prebuild.mjs scripts/
+node .mooncakes/mizchi/v8/src/scripts/setup-consumer.mjs --main-pkg cmd/main/moon.pkg
 moon check --target native
 ```
 
-With Moon `0.1.20260309` / MoonBit `v0.8.3`, dependency-side native hooks are not applied to consumers automatically. In practice, consumers need one small prebuild script in their own module.
+With Moon `0.1.20260309` / MoonBit `v0.8.3`, dependency-side native hooks are not applied to consumers automatically. The bundled setup helper patches the consumer module for the common case:
 
-Add this to your `moon.mod.json`:
+- copies `scripts/mizchi-v8-consumer-prebuild.mjs`
+- adds `--moonbit-unstable-prebuild` to `moon.mod.json`
+- adds `${build.MIZCHI_V8_CC_LINK_FLAGS}` and `"supported-targets": "native"` to the specified main package
 
-```json
-{
-  "--moonbit-unstable-prebuild": "scripts/mizchi-v8-consumer-prebuild.mjs"
-}
-```
+If your main package lives somewhere else, pass it explicitly:
 
-And add this to the package that produces your final native binary:
-
-```moonbit
-options(
-  "is-main": true,
-  link: {
-    "native": {
-      "cc-link-flags": "${build.MIZCHI_V8_CC_LINK_FLAGS}",
-    },
-  },
-)
+```bash
+node .mooncakes/mizchi/v8/src/scripts/setup-consumer.mjs --main-pkg app/server/moon.pkg
 ```
 
 ### Prerequisites
@@ -60,10 +48,10 @@ options(
 - `bash`
 - Rust toolchain with `cargo`
 - a native C/C++ toolchain
-- `node` for the consumer-side prebuild script
+- `node` for the bundled consumer setup / prebuild scripts
 - network access to GitHub, crates.io, and the `rusty_v8` release mirror
 
-The published package also uses a `postadd` hook to eagerly build the native bridge in the installed module cache, but the consumer-side link setup is still required today.
+The published package also uses a `postadd` hook to eagerly build the native bridge in the installed module cache. The one-time consumer module setup is still required today, but the setup script above automates the common mooncakes workflow.
 
 ### Develop From Source
 
@@ -132,17 +120,17 @@ match @v8.runtime_new() {
 - async handles: `PromiseHandle`, `ModuleEvalHandle`, `ModuleHandle`
 - bootstrap: `Runtime::load_module`, `RuntimeBuilder`, `SnapshotBuilder`, `RuntimeImage`
 - value bridge: `set/get/call_global_json`, `set/get/call_global_bytes`, `eval_json`, `eval_bytes`
-- host bridge: `register_sync_*_callback`, `register_*_op`, `take_*_op`, `resolve_*_op`, `reject_*_op`
+- host bridge: `register_*_callback`, `register_*_result_callback`, `register_*_result_callback_with_json_error`, `register_*_op`, `take_*_op`, `resolve_*_op`, `reject_*_op`, `reject_async_*_op_with_json`
+- direct async callback: `register_async_json_callback`, `register_async_bytes_callback`, `register_async_*_result_callback`
+- Failure reasons can be returned as JSON values in addition to plain strings.
 
 For the complete public surface and more examples, see [src/README.mbt.md](src/README.mbt.md).
 
 ## Limitations
 
 - native target only
-- only one runtime can exist at a time
-- async host callback surface is not implemented yet
 - this project targets low-level embedder bindings, not Node / Deno compatibility APIs
-- consumers still need a small module-level prebuild setup today
+- mooncakes consumers still need a one-time setup step today
 - local path dependencies do not get the same install-time hook behavior as `moon add`
 
 ## Documentation

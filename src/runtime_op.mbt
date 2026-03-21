@@ -27,6 +27,57 @@ pub struct AsyncBytesOpRequest {
 }
 
 ///|
+fn encode_callback_ok(payload : Bytes) -> Bytes {
+  Bytes::from_array([0]) + payload
+}
+
+///|
+fn encode_callback_err(message : String) -> Bytes {
+  Bytes::from_array([1]) + @utf8.encode(message)
+}
+
+///|
+fn encode_callback_json_err(error_json : String) -> Bytes {
+  Bytes::from_array([2]) + @utf8.encode(error_json)
+}
+
+///|
+fn encode_json_callback_result(result : Result[String, String]) -> Bytes {
+  match result {
+    Ok(json) => encode_callback_ok(@utf8.encode(json))
+    Err(message) => encode_callback_err(message)
+  }
+}
+
+///|
+fn encode_json_callback_result_with_json_error(
+  result : Result[String, String],
+) -> Bytes {
+  match result {
+    Ok(json) => encode_callback_ok(@utf8.encode(json))
+    Err(error_json) => encode_callback_json_err(error_json)
+  }
+}
+
+///|
+fn encode_bytes_callback_result(result : Result[Bytes, String]) -> Bytes {
+  match result {
+    Ok(bytes) => encode_callback_ok(bytes)
+    Err(message) => encode_callback_err(message)
+  }
+}
+
+///|
+fn encode_bytes_callback_result_with_json_error(
+  result : Result[Bytes, String],
+) -> Bytes {
+  match result {
+    Ok(bytes) => encode_callback_ok(bytes)
+    Err(error_json) => encode_callback_json_err(error_json)
+  }
+}
+
+///|
 pub fn Runtime::register_sync_json_op(
   self : Runtime,
   name : String,
@@ -87,7 +138,61 @@ pub fn Runtime::register_sync_json_callback(
     name_bytes,
     name_bytes.length(),
     fn(call, payload) { call(payload) },
-    fn(payload) { @utf8.encode(callback(@utf8.decode_lossy(payload))) },
+    fn(payload) {
+      encode_json_callback_result(Ok(callback(@utf8.decode_lossy(payload))))
+    },
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_register_sync_json_callback_native failed",
+  )
+}
+
+///|
+pub fn Runtime::register_sync_json_result_callback(
+  self : Runtime,
+  name : String,
+  callback : (String) -> Result[String, String],
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let name_bytes = @utf8.encode(name)
+  runtime_register_sync_json_callback_native(
+    handle,
+    name_bytes,
+    name_bytes.length(),
+    fn(call, payload) { call(payload) },
+    fn(payload) {
+      encode_json_callback_result(callback(@utf8.decode_lossy(payload)))
+    },
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_register_sync_json_callback_native failed",
+  )
+}
+
+///|
+pub fn Runtime::register_sync_json_result_callback_with_json_error(
+  self : Runtime,
+  name : String,
+  callback : (String) -> Result[String, String],
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let name_bytes = @utf8.encode(name)
+  runtime_register_sync_json_callback_native(
+    handle,
+    name_bytes,
+    name_bytes.length(),
+    fn(call, payload) { call(payload) },
+    fn(payload) {
+      encode_json_callback_result_with_json_error(
+        callback(@utf8.decode_lossy(payload)),
+      )
+    },
     err_ptr,
   )
   native_unit_result(
@@ -128,7 +233,55 @@ pub fn Runtime::register_sync_bytes_callback(
     name_bytes,
     name_bytes.length(),
     fn(call, payload) { call(payload) },
-    callback,
+    fn(payload) { encode_bytes_callback_result(Ok(callback(payload))) },
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_register_sync_bytes_callback_native failed",
+  )
+}
+
+///|
+pub fn Runtime::register_sync_bytes_result_callback(
+  self : Runtime,
+  name : String,
+  callback : (Bytes) -> Result[Bytes, String],
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let name_bytes = @utf8.encode(name)
+  runtime_register_sync_bytes_callback_native(
+    handle,
+    name_bytes,
+    name_bytes.length(),
+    fn(call, payload) { call(payload) },
+    fn(payload) { encode_bytes_callback_result(callback(payload)) },
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_register_sync_bytes_callback_native failed",
+  )
+}
+
+///|
+pub fn Runtime::register_sync_bytes_result_callback_with_json_error(
+  self : Runtime,
+  name : String,
+  callback : (Bytes) -> Result[Bytes, String],
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let name_bytes = @utf8.encode(name)
+  runtime_register_sync_bytes_callback_native(
+    handle,
+    name_bytes,
+    name_bytes.length(),
+    fn(call, payload) { call(payload) },
+    fn(payload) {
+      encode_bytes_callback_result_with_json_error(callback(payload))
+    },
     err_ptr,
   )
   native_unit_result(
@@ -181,6 +334,83 @@ pub fn Runtime::register_async_json_op(
 }
 
 ///|
+pub fn Runtime::register_async_json_callback(
+  self : Runtime,
+  name : String,
+  callback : (String) -> String,
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let name_bytes = @utf8.encode(name)
+  runtime_register_async_json_callback_native(
+    handle,
+    name_bytes,
+    name_bytes.length(),
+    fn(call, payload) { call(payload) },
+    fn(payload) {
+      encode_json_callback_result(Ok(callback(@utf8.decode_lossy(payload))))
+    },
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_register_async_json_callback_native failed",
+  )
+}
+
+///|
+pub fn Runtime::register_async_json_result_callback(
+  self : Runtime,
+  name : String,
+  callback : (String) -> Result[String, String],
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let name_bytes = @utf8.encode(name)
+  runtime_register_async_json_callback_native(
+    handle,
+    name_bytes,
+    name_bytes.length(),
+    fn(call, payload) { call(payload) },
+    fn(payload) {
+      encode_json_callback_result(callback(@utf8.decode_lossy(payload)))
+    },
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_register_async_json_callback_native failed",
+  )
+}
+
+///|
+pub fn Runtime::register_async_json_result_callback_with_json_error(
+  self : Runtime,
+  name : String,
+  callback : (String) -> Result[String, String],
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let name_bytes = @utf8.encode(name)
+  runtime_register_async_json_callback_native(
+    handle,
+    name_bytes,
+    name_bytes.length(),
+    fn(call, payload) { call(payload) },
+    fn(payload) {
+      encode_json_callback_result_with_json_error(
+        callback(@utf8.decode_lossy(payload)),
+      )
+    },
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_register_async_json_callback_native failed",
+  )
+}
+
+///|
 pub fn Runtime::register_async_bytes_op(
   self : Runtime,
   name : String,
@@ -196,6 +426,77 @@ pub fn Runtime::register_async_bytes_op(
     err_ptr,
   )
   native_unit_result(err_ptr, "runtime_register_async_bytes_op_native failed")
+}
+
+///|
+pub fn Runtime::register_async_bytes_callback(
+  self : Runtime,
+  name : String,
+  callback : (Bytes) -> Bytes,
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let name_bytes = @utf8.encode(name)
+  runtime_register_async_bytes_callback_native(
+    handle,
+    name_bytes,
+    name_bytes.length(),
+    fn(call, payload) { call(payload) },
+    fn(payload) { encode_bytes_callback_result(Ok(callback(payload))) },
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_register_async_bytes_callback_native failed",
+  )
+}
+
+///|
+pub fn Runtime::register_async_bytes_result_callback(
+  self : Runtime,
+  name : String,
+  callback : (Bytes) -> Result[Bytes, String],
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let name_bytes = @utf8.encode(name)
+  runtime_register_async_bytes_callback_native(
+    handle,
+    name_bytes,
+    name_bytes.length(),
+    fn(call, payload) { call(payload) },
+    fn(payload) { encode_bytes_callback_result(callback(payload)) },
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_register_async_bytes_callback_native failed",
+  )
+}
+
+///|
+pub fn Runtime::register_async_bytes_result_callback_with_json_error(
+  self : Runtime,
+  name : String,
+  callback : (Bytes) -> Result[Bytes, String],
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let name_bytes = @utf8.encode(name)
+  runtime_register_async_bytes_callback_native(
+    handle,
+    name_bytes,
+    name_bytes.length(),
+    fn(call, payload) { call(payload) },
+    fn(payload) {
+      encode_bytes_callback_result_with_json_error(callback(payload))
+    },
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_register_async_bytes_callback_native failed",
+  )
 }
 
 ///|
@@ -430,6 +731,28 @@ pub fn Runtime::reject_async_json_op(
 }
 
 ///|
+pub fn Runtime::reject_async_json_op_with_json(
+  self : Runtime,
+  op_id : UInt64,
+  error_json : String,
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let error_json_bytes = @utf8.encode(error_json)
+  runtime_reject_async_json_op_with_json_native(
+    handle,
+    op_id,
+    error_json_bytes,
+    error_json_bytes.length(),
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_reject_async_json_op_with_json_native failed",
+  )
+}
+
+///|
 pub fn Runtime::reject_async_bytes_op(
   self : Runtime,
   op_id : UInt64,
@@ -447,4 +770,26 @@ pub fn Runtime::reject_async_bytes_op(
     err_ptr,
   )
   native_unit_result(err_ptr, "runtime_reject_async_bytes_op_native failed")
+}
+
+///|
+pub fn Runtime::reject_async_bytes_op_with_json(
+  self : Runtime,
+  op_id : UInt64,
+  error_json : String,
+) -> Result[Unit, V8Error] {
+  let prepared = prepare_runtime_call(self)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+  let (handle, err_ptr) = prepared.unwrap()
+  let error_json_bytes = @utf8.encode(error_json)
+  runtime_reject_async_bytes_op_with_json_native(
+    handle,
+    op_id,
+    error_json_bytes,
+    error_json_bytes.length(),
+    err_ptr,
+  )
+  native_unit_result(
+    err_ptr, "runtime_reject_async_bytes_op_with_json_native failed",
+  )
 }

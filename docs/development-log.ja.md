@@ -55,16 +55,15 @@
 - [x] async bytes op queue
 - [x] sync JSON callback
 - [x] sync bytes callback
-- [ ] async host callback
-- [ ] richer host op surface
+- [x] async host callback
+- [x] richer host op surface
 
 ## 現在の制約
 
 - native target のみを対象にしている
-- `rusty_v8::OwnedIsolate` の扱いに合わせて、同時に 1 runtime のみ許可している
 - Node / Deno 互換層は提供していない
-- async host callback はまだないので、非同期 host 連携は queue ベースの op で回す前提
-- 現状は mooncakes から import する consumer module 側にも prebuild と link glue が必要
+- 非同期 host 連携は queue ベースの op に加えて direct callback / result callback でも扱え、失敗 reason には String だけでなく JSON value も使える
+- 現状は mooncakes から import する consumer module 側にも 1 回限りの設定が必要だが、同梱 setup script で一般的な導線は自動化できる
 
 ## 設計メモ
 
