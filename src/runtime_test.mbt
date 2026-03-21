@@ -172,6 +172,151 @@ test "runtime can call async global function with bytes" {
 }
 
 ///|
+test "runtime can install deno core compat for sync json ops" {
+  let result = with_runtime(fn(runtime) {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { return Err(installed.unwrap_err()) }
+    let registered = runtime.register_sync_json_result_callback("add", fn(
+      payload,
+    ) {
+      if payload == "[20,22]" {
+        Ok("{\"answer\":42}")
+      } else {
+        Err("blocked")
+      }
+    })
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    runtime.eval_json("Deno.core.opSync('add', [20, 22])")
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}\")")
+}
+
+///|
+test "runtime can install deno core compat for async json ops via proxy" {
+  let result = with_runtime(fn(runtime) {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { return Err(installed.unwrap_err()) }
+    let registered = runtime.register_async_json_result_callback("add", fn(
+      payload,
+    ) {
+      if payload == "[20,22]" {
+        Ok("{\"answer\":42}")
+      } else {
+        Err("blocked")
+      }
+    })
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    runtime.eval_async_json("Deno.core.opAsync(Deno.core.ops.add, [20, 22])")
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}\")")
+}
+
+///|
+test "runtime can install deno core compat for sync bytes ops" {
+  let result = with_runtime(fn(runtime) {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { return Err(installed.unwrap_err()) }
+    let registered = runtime.register_sync_bytes_result_callback("reverse", fn(
+      payload,
+    ) {
+      if @utf8.decode_lossy(payload) == "ABC" {
+        Ok(@utf8.encode("CBA"))
+      } else {
+        Err("blocked")
+      }
+    })
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let value = runtime.eval_bytes(
+      "Deno.core.opSyncBytes(Deno.core.opsBytes.reverse, new Uint8Array([65, 66, 67]))",
+    )
+    guard value is Ok(_) else { return Err(value.unwrap_err()) }
+    Ok(@utf8.decode_lossy(value.unwrap()))
+  })
+  inspect(result, content="Ok(\"CBA\")")
+}
+
+///|
+test "runtime can install deno core compat metadata" {
+  let result = with_runtime(fn(runtime) {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { return Err(installed.unwrap_err()) }
+    runtime.eval_json(
+      "({ argsOk: Array.isArray(Deno.args) && Deno.args.length === 0, buildOk: typeof Deno.build.os === 'string' && typeof Deno.build.arch === 'string', versionOk: typeof Deno.version.v8 === 'string' && Deno.version.v8.length > 0 })",
+    )
+  })
+  inspect(
+    result,
+    content="Ok(\"{\\\"argsOk\\\":true,\\\"buildOk\\\":true,\\\"versionOk\\\":true}\")",
+  )
+}
+
+///|
+test "runtime can install deno core compat utility helpers" {
+  let result = with_runtime(fn(runtime) {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { return Err(installed.unwrap_err()) }
+    runtime.eval_async_json(
+      "(async () => { const promise = Deno.core.unrefOpPromise(Promise.resolve({ answer: 42 })); Deno.core.close(1); Deno.core.tryClose(1); return { text: Deno.core.decode(Deno.core.encode('AB')), resources: Object.keys(Deno.core.resources()).length, answer: (await promise).answer, inspect: Deno.inspect({ answer: 42 }), cwd: Deno.cwd(), execPath: Deno.execPath(), pid: Deno.pid, noColor: Deno.noColor, exitCode: Deno.exitCode }; })()",
+    )
+  })
+  inspect(
+    result,
+    content="Ok(\"{\\\"text\\\":\\\"AB\\\",\\\"resources\\\":0,\\\"answer\\\":42,\\\"inspect\\\":\\\"{\\\\\\\"answer\\\\\\\":42}\\\",\\\"cwd\\\":\\\"/\\\",\\\"execPath\\\":\\\"/mizchi-v8/deno\\\",\\\"pid\\\":0,\\\"noColor\\\":false,\\\"exitCode\\\":0}\")",
+  )
+}
+
+///|
+test "runtime can install deno core compat for async bytes ops via proxy" {
+  let result = with_runtime(fn(runtime) {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { return Err(installed.unwrap_err()) }
+    let registered = runtime.register_async_bytes_result_callback("decorate", fn(
+      payload,
+    ) {
+      if @utf8.decode_lossy(payload) == "AB" {
+        Ok(@utf8.encode("AB!"))
+      } else {
+        Err("blocked")
+      }
+    })
+    guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+    let value = runtime.eval_async_bytes(
+      "Deno.core.opAsyncBytes(Deno.core.opsBytes.decorate, new Uint8Array([65, 66]))",
+    )
+    guard value is Ok(_) else { return Err(value.unwrap_err()) }
+    Ok(@utf8.decode_lossy(value.unwrap()))
+  })
+  inspect(result, content="Ok(\"AB!\")")
+}
+
+///|
+test "runtime can install node compat globals and buffer" {
+  let result = with_runtime(fn(runtime) {
+    let installed = runtime.install_node_compat()
+    guard installed is Ok(_) else { return Err(installed.unwrap_err()) }
+    runtime.eval_json(
+      "({ sameGlobal: global === globalThis, versionOk: typeof process.versions.v8 === 'string' && process.versions.v8.length > 0, text: Buffer.from([65, 66]).toString(), size: Buffer.from('AB').length, concat: Buffer.concat([Buffer.from('A'), Buffer.from('B')]).toString() })",
+    )
+  })
+  inspect(
+    result,
+    content="Ok(\"{\\\"sameGlobal\\\":true,\\\"versionOk\\\":true,\\\"text\\\":\\\"AB\\\",\\\"size\\\":2,\\\"concat\\\":\\\"AB\\\"}\")",
+  )
+}
+
+///|
+test "runtime can install node compat next tick" {
+  let result = with_runtime(fn(runtime) {
+    let installed = runtime.install_node_compat()
+    guard installed is Ok(_) else { return Err(installed.unwrap_err()) }
+    runtime.eval_async_json(
+      "(async () => { let value = 'A'; await new Promise((resolve) => process.nextTick(() => { value = 'B'; resolve(null); })); return { value }; })()",
+    )
+  })
+  inspect(result, content="Ok(\"{\\\"value\\\":\\\"B\\\"}\")")
+}
+
+///|
 test "runtime async json op queue is empty by default" {
   let result = with_runtime(fn(runtime) {
     let op = runtime.take_async_json_op()
@@ -1087,6 +1232,41 @@ test "runtime builder consumes snapshot builder state" {
 }
 
 ///|
+test "runtime builder can preload deno core compat" {
+  let result = runtime_builder_new()
+    .with_deno_core_compat()
+    .with_runtime(fn(runtime) {
+      let registered = runtime.register_sync_json_result_callback("add", fn(
+        payload,
+      ) {
+        if payload == "[20,22]" {
+          Ok("{\"answer\":42}")
+        } else {
+          Err("blocked")
+        }
+      })
+      guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+      runtime.eval_json("Deno.core.opSync(Deno.core.ops.add, [20, 22])")
+    })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}\")")
+}
+
+///|
+test "runtime builder can preload node compat" {
+  let result = runtime_builder_new()
+    .with_node_compat()
+    .with_runtime(fn(runtime) {
+      runtime.eval_json(
+        "({ sameGlobal: global === globalThis, versionOk: typeof process.version === 'string', text: Buffer.from('AB').toString() })",
+      )
+    })
+  inspect(
+    result,
+    content="Ok(\"{\\\"sameGlobal\\\":true,\\\"versionOk\\\":true,\\\"text\\\":\\\"AB\\\"}\")",
+  )
+}
+
+///|
 test "runtime builder builds reusable runtime image" {
   let result = match
     runtime_builder_new()
@@ -1141,6 +1321,38 @@ test "snapshot builder combines multiple init scripts" {
     .eval("globalThis.answer = globalThis.base + 2;")
     .with_runtime(fn(runtime) { runtime.eval_string("globalThis.answer") })
   inspect(result, content="Ok(\"42\")")
+}
+
+///|
+test "snapshot builder can preload deno core compat" {
+  let result = snapshot_builder_new()
+    .with_deno_core_compat()
+    .with_runtime(fn(runtime) {
+      let registered = runtime.register_async_json_result_callback("add", fn(
+        payload,
+      ) {
+        if payload == "[20,22]" {
+          Ok("{\"answer\":42}")
+        } else {
+          Err("blocked")
+        }
+      })
+      guard registered is Ok(_) else { return Err(registered.unwrap_err()) }
+      runtime.eval_async_json("Deno.core.opAsync(Deno.core.ops.add, [20, 22])")
+    })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}\")")
+}
+
+///|
+test "snapshot builder can preload node compat" {
+  let result = snapshot_builder_new()
+    .with_node_compat()
+    .with_runtime(fn(runtime) {
+      runtime.eval_async_json(
+        "(async () => { let value = Buffer.alloc(2); value[0] = 65; value[1] = 66; await new Promise((resolve) => process.nextTick(resolve)); return { text: value.toString() }; })()",
+      )
+    })
+  inspect(result, content="Ok(\"{\\\"text\\\":\\\"AB\\\"}\")")
 }
 
 ///|
@@ -1369,6 +1581,63 @@ test "promise handle can await named promise script with relative dynamic import
     promise.unwrap().await_string()
   })
   inspect(result, content="Ok(\"42\")")
+}
+
+///|
+async test "promise handle can await json through moonbit async event loop with deno core ops" {
+  let result = match runtime_new() {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      let installed = runtime.install_deno_core_compat()
+      guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+      let registered = runtime.register_async_json_task_result_callback("add", payload => {
+        @async.sleep(10)
+        if payload == "{\"base\":40}" {
+          Ok("{\"answer\":42}")
+        } else {
+          Err("blocked")
+        }
+      })
+      guard registered is Ok(_) else { Err(registered.unwrap_err()) }
+      let promise = runtime.eval_promise_string(
+        "(async () => { const payload = await Deno.core.opAsync(Deno.core.ops.add, { base: 40 }); return payload.answer; })()",
+      )
+      guard promise is Ok(_) else { Err(promise.unwrap_err()) }
+      promise.unwrap().await_json_async()
+    }
+    Err(err) => Err(err)
+  }
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+async test "promise handle can await bytes through moonbit async event loop with deno core ops" {
+  let result = match runtime_new() {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      let installed = runtime.install_deno_core_compat()
+      guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+      let registered = runtime.register_async_bytes_task_result_callback(
+        "decorate",
+        payload => {
+          @async.sleep(10)
+          if @utf8.decode_lossy(payload) == "AB" {
+            Ok(@utf8.encode("AB!"))
+          } else {
+            Err("blocked")
+          }
+        },
+      )
+      guard registered is Ok(_) else { Err(registered.unwrap_err()) }
+      let promise = runtime.eval_promise_string(
+        "(async () => { const bytes = await Deno.core.opAsyncBytes(Deno.core.opsBytes.decorate, new Uint8Array([65, 66])); return Deno.core.decode(bytes); })()",
+      )
+      guard promise is Ok(_) else { Err(promise.unwrap_err()) }
+      promise.unwrap().await_json_async()
+    }
+    Err(err) => Err(err)
+  }
+  inspect(result, content="Ok(\"\\\"AB!\\\"\")")
 }
 
 ///|
@@ -1638,4 +1907,36 @@ test "runtime can drive top-level await module through async json op" {
     )
   })
   inspect(result, content="Ok(\"Pending:load_answer:{\\\"base\\\":40}:42\")")
+}
+
+///|
+async test "module eval handle can await ready through moonbit async event loop with deno core ops" {
+  let result = match runtime_new() {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      let installed = runtime.install_deno_core_compat()
+      guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+      let registered = runtime.register_async_json_task_result_callback(
+        "load_answer",
+        payload => {
+          @async.sleep(10)
+          if payload == "{\"base\":40}" {
+            Ok("{\"base\":40}")
+          } else {
+            Err("blocked")
+          }
+        },
+      )
+      guard registered is Ok(_) else { Err(registered.unwrap_err()) }
+      let module_eval = runtime.eval_module_handle_async_string_with_specifier(
+        "file:///feature/main.mjs", "const payload = await Deno.core.opAsync(Deno.core.ops.load_answer, { base: 40 }); export const answer = payload.base + 2;",
+      )
+      guard module_eval is Ok(_) else { Err(module_eval.unwrap_err()) }
+      let module_handle = module_eval.unwrap().await_ready_async()
+      guard module_handle is Ok(_) else { Err(module_handle.unwrap_err()) }
+      module_handle.unwrap().get_export_json("answer")
+    }
+    Err(err) => Err(err)
+  }
+  inspect(result, content="Ok(\"42\")")
 }

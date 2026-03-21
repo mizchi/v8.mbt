@@ -15,6 +15,10 @@ All notable changes to this project should be documented in this file.
 - Multiple runtimes can now coexist in the same process
 - Bundled `src/scripts/setup-consumer.mjs` to automate the common mooncakes consumer setup path
 - `setup-consumer.mjs --build-bridge` to cover local path dependency bootstrapping from the same helper
+- Opt-in `Deno.core` op shim helpers via `install_deno_core_compat` and `with_deno_core_compat`
+- Opt-in Node-style shim helpers via `install_node_compat` and `with_node_compat`
+- Shared compat helpers split out from Deno / Node shims, with Deno utility helpers expanded around `Deno.core` and minimal top-level `Deno` metadata
+- MoonBit async event-loop bridge for Deno-style pending ops via `register_async_*_task_*`, `PromiseHandle::await_*_async`, and `ModuleEvalHandle::await_ready_async`
 
 ### Changed
 

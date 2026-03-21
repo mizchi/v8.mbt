@@ -284,6 +284,15 @@ pub fn PromiseHandle::await_string(
 }
 
 ///|
+pub async fn PromiseHandle::await_string_async(
+  self : PromiseHandle,
+) -> Result[String, V8Error] {
+  let waited = wait_for_promise_handle_async(self)
+  guard waited is Ok(_) else { return Err(waited.unwrap_err()) }
+  self.result_string()
+}
+
+///|
 pub fn PromiseHandle::await_json(
   self : PromiseHandle,
 ) -> Result[String, V8Error] {
@@ -293,10 +302,28 @@ pub fn PromiseHandle::await_json(
 }
 
 ///|
+pub async fn PromiseHandle::await_json_async(
+  self : PromiseHandle,
+) -> Result[String, V8Error] {
+  let waited = wait_for_promise_handle_async(self)
+  guard waited is Ok(_) else { return Err(waited.unwrap_err()) }
+  self.result_json()
+}
+
+///|
 pub fn PromiseHandle::await_bytes(
   self : PromiseHandle,
 ) -> Result[Bytes, V8Error] {
   let waited = wait_for_promise_handle(self, 1024)
+  guard waited is Ok(_) else { return Err(waited.unwrap_err()) }
+  self.result_bytes()
+}
+
+///|
+pub async fn PromiseHandle::await_bytes_async(
+  self : PromiseHandle,
+) -> Result[Bytes, V8Error] {
+  let waited = wait_for_promise_handle_async(self)
   guard waited is Ok(_) else { return Err(waited.unwrap_err()) }
   self.result_bytes()
 }

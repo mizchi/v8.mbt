@@ -61,8 +61,9 @@ This document tracks the implementation status, design notes, and known limitati
 ## Current Limitations
 
 - native target only
-- no Node / Deno compatibility layer
+- compatibility is still partial: Deno is limited to an opt-in `Deno.core` op/util shim plus a few top-level `Deno` helpers, and Node to a minimal `global` / `process` / `Buffer` shim
 - async host integration can now use queue-based ops, direct callbacks, and result callbacks, and failure reasons can be passed as JSON values as well as plain strings
+- the MoonBit async event-loop driver can now drive Deno-style pending ops, but it allows only one active loop per runtime and assumes you do not mix it with manual `take_async_*_op` handling on the same lane
 - consumer modules still need one-time setup when importing this package from mooncakes today, although the bundled setup script now automates the common path and can also build the bridge for local path dependencies via `--build-bridge`
 
 ## Design Notes
@@ -71,6 +72,8 @@ This document tracks the implementation status, design notes, and known limitati
 - hide `rusty_v8` initialization and link complexity behind the Rust layer
 - stabilize the public API in MoonBit while keeping the Rust implementation replaceable
 - focus first on JSON and bytes as the two value lanes needed for runtime-loop experiments
+- split compatibility code into shared helpers plus Deno / Node shims, and prioritize expanding the Deno-facing surface first
+- the Deno-core-style `run_event_loop` path is modeled on MoonBit async task groups, which poll pending V8 ops and dispatch them into async tasks
 
 ## Where To Look Next
 

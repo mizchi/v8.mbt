@@ -14,6 +14,9 @@
 - work with preloaded modules, relative imports, and dynamic imports
 - build snapshots and runtime images for reusable isolate startup
 - experiment with host-side event loops through `MoonBit.opSync(...)` and `MoonBit.opAsync(...)`
+- drive Deno-style `opAsync` and top-level await through MoonBit's async event loop
+- preload an opt-in Deno shim with `Deno.core.op*`, utility helpers, and minimal `Deno.inspect` / `cwd` / `execPath`
+- preload an opt-in Node-style shim with `global`, `process.nextTick`, and a minimal `Buffer`
 
 ## Status
 
@@ -128,6 +131,9 @@ match @v8.runtime_new() {
 - value bridge: `set/get/call_global_json`, `set/get/call_global_bytes`, `eval_json`, `eval_bytes`
 - host bridge: `register_*_callback`, `register_*_result_callback`, `register_*_result_callback_with_json_error`, `register_*_op`, `take_*_op`, `resolve_*_op`, `reject_*_op`, `reject_async_*_op_with_json`
 - direct async callback: `register_async_json_callback`, `register_async_bytes_callback`, `register_async_*_result_callback`
+- async event loop bridge: `register_async_*_task_*`, `PromiseHandle::await_*_async`, `ModuleEvalHandle::await_ready_async`
+- deno compat: `Runtime::install_deno_core_compat`, `RuntimeBuilder::with_deno_core_compat`, `SnapshotBuilder::with_deno_core_compat`
+- minimal node shim: `Runtime::install_node_compat`, `RuntimeBuilder::with_node_compat`, `SnapshotBuilder::with_node_compat`
 - Failure reasons can be returned as JSON values in addition to plain strings.
 
 For the complete public surface and more examples, see [src/README.mbt.md](src/README.mbt.md).
@@ -135,7 +141,8 @@ For the complete public surface and more examples, see [src/README.mbt.md](src/R
 ## Limitations
 
 - native target only
-- this project targets low-level embedder bindings, not Node / Deno compatibility APIs
+- this project primarily targets low-level embedder bindings; Deno compatibility is currently limited to an opt-in `Deno.core` op/util shim plus a few top-level `Deno` helpers, and Node compatibility to a minimal `global` / `process` / `Buffer` shim
+- the MoonBit async event-loop driver allows only one active loop per runtime and assumes you do not mix it with manual `take_async_*_op` handling on the same lane
 - mooncakes consumers still need a one-time setup step today
 - local path dependencies do not run install hooks automatically, but `setup-consumer.mjs --build-bridge` can cover the same bootstrap step
 

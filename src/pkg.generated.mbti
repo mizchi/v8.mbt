@@ -80,6 +80,7 @@ pub struct ModuleEvalHandle {
   // private fields
 }
 pub fn ModuleEvalHandle::await_ready(Self) -> Result[ModuleHandle, V8Error]
+pub async fn ModuleEvalHandle::await_ready_async(Self) -> Result[ModuleHandle, V8Error]
 pub fn ModuleEvalHandle::dispose(Self) -> Unit
 pub fn ModuleEvalHandle::is_closed(Self) -> Bool
 pub fn ModuleEvalHandle::module_handle(Self) -> ModuleHandle
@@ -107,8 +108,11 @@ pub struct PromiseHandle {
   // private fields
 }
 pub fn PromiseHandle::await_bytes(Self) -> Result[Bytes, V8Error]
+pub async fn PromiseHandle::await_bytes_async(Self) -> Result[Bytes, V8Error]
 pub fn PromiseHandle::await_json(Self) -> Result[String, V8Error]
+pub async fn PromiseHandle::await_json_async(Self) -> Result[String, V8Error]
 pub fn PromiseHandle::await_string(Self) -> Result[String, V8Error]
+pub async fn PromiseHandle::await_string_async(Self) -> Result[String, V8Error]
 pub fn PromiseHandle::dispose(Self) -> Unit
 pub fn PromiseHandle::is_closed(Self) -> Bool
 pub fn PromiseHandle::result_bytes(Self) -> Result[Bytes, V8Error]
@@ -154,6 +158,8 @@ pub fn Runtime::eval_string(Self, String) -> Result[String, V8Error]
 pub fn Runtime::eval_string_with_name(Self, String, String) -> Result[String, V8Error]
 pub fn Runtime::get_global_bytes(Self, String) -> Result[Bytes, V8Error]
 pub fn Runtime::get_global_json(Self, String) -> Result[String, V8Error]
+pub fn Runtime::install_deno_core_compat(Self) -> Result[Unit, V8Error]
+pub fn Runtime::install_node_compat(Self) -> Result[Unit, V8Error]
 pub fn Runtime::is_closed(Self) -> Bool
 pub fn Runtime::load_module(Self, String, String) -> Result[Unit, V8Error]
 pub fn Runtime::load_modules(Self, Array[ModuleSource]) -> Result[Unit, V8Error]
@@ -164,10 +170,16 @@ pub fn Runtime::register_async_bytes_callback(Self, String, (Bytes) -> Bytes) ->
 pub fn Runtime::register_async_bytes_op(Self, String) -> Result[Unit, V8Error]
 pub fn Runtime::register_async_bytes_result_callback(Self, String, (Bytes) -> Result[Bytes, String]) -> Result[Unit, V8Error]
 pub fn Runtime::register_async_bytes_result_callback_with_json_error(Self, String, (Bytes) -> Result[Bytes, String]) -> Result[Unit, V8Error]
+pub fn Runtime::register_async_bytes_task_callback(Self, String, async (Bytes) -> Bytes) -> Result[Unit, V8Error]
+pub fn Runtime::register_async_bytes_task_result_callback(Self, String, async (Bytes) -> Result[Bytes, String]) -> Result[Unit, V8Error]
+pub fn Runtime::register_async_bytes_task_result_callback_with_json_error(Self, String, async (Bytes) -> Result[Bytes, String]) -> Result[Unit, V8Error]
 pub fn Runtime::register_async_json_callback(Self, String, (String) -> String) -> Result[Unit, V8Error]
 pub fn Runtime::register_async_json_op(Self, String) -> Result[Unit, V8Error]
 pub fn Runtime::register_async_json_result_callback(Self, String, (String) -> Result[String, String]) -> Result[Unit, V8Error]
 pub fn Runtime::register_async_json_result_callback_with_json_error(Self, String, (String) -> Result[String, String]) -> Result[Unit, V8Error]
+pub fn Runtime::register_async_json_task_callback(Self, String, async (String) -> String) -> Result[Unit, V8Error]
+pub fn Runtime::register_async_json_task_result_callback(Self, String, async (String) -> Result[String, String]) -> Result[Unit, V8Error]
+pub fn Runtime::register_async_json_task_result_callback_with_json_error(Self, String, async (String) -> Result[String, String]) -> Result[Unit, V8Error]
 pub fn Runtime::register_sync_bytes_callback(Self, String, (Bytes) -> Bytes) -> Result[Unit, V8Error]
 pub fn Runtime::register_sync_bytes_op(Self, String) -> Result[Unit, V8Error]
 pub fn Runtime::register_sync_bytes_result_callback(Self, String, (Bytes) -> Result[Bytes, String]) -> Result[Unit, V8Error]
@@ -197,6 +209,8 @@ pub fn RuntimeBuilder::build_image(Self) -> Result[RuntimeImage, V8Error]
 pub fn RuntimeBuilder::eval_snapshot(Self, String) -> Self
 pub fn RuntimeBuilder::load_module(Self, String, String) -> Self
 pub fn RuntimeBuilder::load_modules(Self, Array[ModuleSource]) -> Self
+pub fn RuntimeBuilder::with_deno_core_compat(Self) -> Self
+pub fn RuntimeBuilder::with_node_compat(Self) -> Self
 pub fn[T] RuntimeBuilder::with_runtime(Self, (Runtime) -> Result[T, V8Error]) -> Result[T, V8Error]
 pub fn RuntimeBuilder::with_snapshot(Self, Bytes) -> Self
 pub fn RuntimeBuilder::with_snapshot_builder(Self, SnapshotBuilder) -> Self
@@ -222,6 +236,8 @@ pub fn SnapshotBuilder::build(Self) -> Result[Bytes, V8Error]
 pub fn SnapshotBuilder::build_image(Self) -> Result[RuntimeImage, V8Error]
 pub fn SnapshotBuilder::build_runtime(Self) -> Result[Runtime, V8Error]
 pub fn SnapshotBuilder::eval(Self, String) -> Self
+pub fn SnapshotBuilder::with_deno_core_compat(Self) -> Self
+pub fn SnapshotBuilder::with_node_compat(Self) -> Self
 pub fn[T] SnapshotBuilder::with_runtime(Self, (Runtime) -> Result[T, V8Error]) -> Result[T, V8Error]
 pub fn SnapshotBuilder::with_snapshot(Self, Bytes) -> Self
 

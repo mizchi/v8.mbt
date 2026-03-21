@@ -190,3 +190,17 @@ pub fn ModuleEvalHandle::await_ready(
     }
   }
 }
+
+///|
+pub async fn ModuleEvalHandle::await_ready_async(
+  self : ModuleEvalHandle,
+) -> Result[ModuleHandle, V8Error] {
+  match self.promise_handle_ {
+    None => Ok(self.module_handle_)
+    Some(promise_handle) => {
+      let waited = wait_for_promise_handle_async(promise_handle)
+      guard waited is Ok(_) else { return Err(waited.unwrap_err()) }
+      Ok(self.module_handle_)
+    }
+  }
+}

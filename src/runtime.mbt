@@ -1,6 +1,27 @@
 ///|
+priv struct AsyncJsonTaskHandler {
+  callback : async (String) -> Result[String, String]
+  use_json_error : Bool
+}
+
+///|
+priv struct AsyncBytesTaskHandler {
+  callback : async (Bytes) -> Result[Bytes, String]
+  use_json_error : Bool
+}
+
+///|
+priv struct RuntimeAsyncLoopState {
+  json_handlers : Map[String, AsyncJsonTaskHandler]
+  bytes_handlers : Map[String, AsyncBytesTaskHandler]
+  mut pending_tasks : Int
+  mut is_running : Bool
+}
+
+///|
 struct RuntimeState {
   mut handle : UInt64
+  async_loop : RuntimeAsyncLoopState
 }
 
 ///|
@@ -73,7 +94,17 @@ fn runtime_from_handle(
   } else if not(native_ptr_is_null(err_ptr)) {
     Err(take_native_error(err_ptr, fallback))
   } else {
-    Ok(Runtime::{ state: Ref::new(RuntimeState::{ handle, }) })
+    Ok(Runtime::{
+      state: Ref::new(RuntimeState::{
+        handle,
+        async_loop: RuntimeAsyncLoopState::{
+          json_handlers: Map::new(),
+          bytes_handlers: Map::new(),
+          pending_tasks: 0,
+          is_running: false,
+        },
+      }),
+    })
   }
 }
 

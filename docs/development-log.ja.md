@@ -61,8 +61,9 @@
 ## 現在の制約
 
 - native target のみを対象にしている
-- Node / Deno 互換層は提供していない
+- 互換層はまだ部分実装で、Deno 側は opt-in の `Deno.core` op/util shim と最小の top-level `Deno` helper、Node 側は `global` / `process` / `Buffer` の最小 shim に限る
 - 非同期 host 連携は queue ベースの op に加えて direct callback / result callback でも扱え、失敗 reason には String だけでなく JSON value も使える
+- MoonBit async event loop で Deno 風 pending op を駆動できるが、同時に回せる loop は 1 runtime あたり 1 本で、同じ lane の手動 `take_async_*_op` loop とは混在させない前提
 - 現状は mooncakes から import する consumer module 側にも 1 回限りの設定が必要だが、同梱 setup script で一般的な導線を自動化でき、local path dependency でも `--build-bridge` を付ければ bridge build まで寄せられる
 
 ## 設計メモ
@@ -71,6 +72,8 @@
 - `rusty_v8` の複雑な初期化やリンクは Rust 側に閉じ込める
 - public API は MoonBit で安定化し、Rust 実装は再生成・差し替えしやすい構造を保つ
 - 値 bridge はまず JSON / bytes の 2 lane に絞り、イベントループ実験で必要な経路を先に揃える
+- 互換層は shared helper と Deno / Node の shim に分離し、当面は Deno 側の surface 拡張を優先する
+- Deno core の `run_event_loop` 相当は Rust future executor の代わりに MoonBit async task group で回し、pending op を queue から task へ dispatch する
 
 ## 次に見る場所
 
