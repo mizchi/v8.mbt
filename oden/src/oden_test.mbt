@@ -17,6 +17,10 @@ test "oden module can expose cli manifest" {
         ":" +
         value.contains("\"defaultOutDir\":\".oden/build/wasm-gc\"").to_string() +
         ":" +
+        value.contains("\"execution\":\"embedded-v8\"").to_string() +
+        ":" +
+        value.contains("\"defaultOutDir\":\".oden/run\"").to_string() +
+        ":" +
         value.contains("\"language\":\"moonbit\"").to_string() +
         ":" +
         value.contains("\"firstClassTargets\":[\"js\",\"wasm\"]").to_string() +
@@ -27,7 +31,7 @@ test "oden module can expose cli manifest" {
   }
   inspect(
     result,
-    content="Ok(\"true:true:true:true:true:true:true:true:true:true\")",
+    content="Ok(\"true:true:true:true:true:true:true:true:true:true:true:true\")",
   )
 }
 
@@ -41,6 +45,8 @@ test "oden routes run command to moon js target" {
       ":" +
       plan.target +
       ":" +
+      plan.out_dir.unwrap_or("none") +
+      ":" +
       plan.argv[0] +
       ":" +
       plan.argv[1] +
@@ -51,7 +57,7 @@ test "oden routes run command to moon js target" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="run:moon:js:run:src/main:--target:js")
+  inspect(result, content="run:moon:js:.oden/run:run:src/main:--target:js")
 }
 
 ///|
@@ -255,6 +261,8 @@ test "oden can stringify plan json" {
     ":" +
     result.contains("\"kind\":\"task\"").to_string() +
     ":" +
+    result.contains("\"execution\":\"subprocess\"").to_string() +
+    ":" +
     result.contains("\"cwd\":\".\"").to_string() +
     ":" +
     result.contains("\"argv\":[\"check\"]").to_string() +
@@ -262,7 +270,7 @@ test "oden can stringify plan json" {
     result.contains("\"outDir\":null").to_string() +
     ":" +
     result.contains("\"target\":\"none\"").to_string(),
-    content="true:true:true:true:true:true:true",
+    content="true:true:true:true:true:true:true:true",
   )
 }
 
@@ -276,6 +284,32 @@ test "oden can stringify bundle out dir in plan json" {
   inspect(
     result.contains("\"outDir\":\".oden/build/wasm-gc\"").to_string(),
     content="true",
+  )
+}
+
+///|
+test "oden can stringify embedded v8 run plan json" {
+  let result = match
+    route_cli(["plan", "run", "app/main", "--", "foo", "bar"]) {
+    Ok(OdenCliRoute::Plan(plan)) => plan_json(plan)
+    Ok(_) => "unexpected"
+    Err(err) => err
+  }
+  inspect(
+    result.contains("\"execution\":\"embedded-v8\"").to_string() +
+    ":" +
+    result.contains("\"buildProgram\":\"moon\"").to_string() +
+    ":" +
+    result
+    .contains(
+      "\"buildArgv\":[\"build\",\"app/main\",\"--target\",\"js\",\"--target-dir\",\".oden/run\"]",
+    )
+    .to_string() +
+    ":" +
+    result.contains("\"guestArgv\":[\"foo\",\"bar\"]").to_string() +
+    ":" +
+    result.contains("\"outDir\":\".oden/run\"").to_string(),
+    content="true:true:true:true:true",
   )
 }
 
@@ -318,12 +352,12 @@ test "oden can expose version text" {
 test "oden builder preloads compat" {
   let result = builder_new().with_runtime(fn(runtime) {
     runtime.eval_json(
-      "({ sameCore: Oden.core === Deno.core, bundleTarget: Oden.cli.command('bundle').defaultTarget, hasFmt: Oden.cli.command('fmt') !== null, hasTask: Oden.cli.command('task') !== null, hasPlan: Oden.cli.command('plan') !== null, execPath: Oden.execPath() })",
+      "({ sameCore: Oden.core === Deno.core, runExecution: Oden.cli.command('run').execution, runOutDir: Oden.cli.command('run').defaultOutDir, bundleTarget: Oden.cli.command('bundle').defaultTarget, hasFmt: Oden.cli.command('fmt') !== null, hasTask: Oden.cli.command('task') !== null, hasPlan: Oden.cli.command('plan') !== null, execPath: Oden.execPath() })",
     )
   })
   inspect(
     result,
-    content="Ok(\"{\\\"sameCore\\\":true,\\\"bundleTarget\\\":\\\"wasm\\\",\\\"hasFmt\\\":true,\\\"hasTask\\\":true,\\\"hasPlan\\\":true,\\\"execPath\\\":\\\"/mizchi-oden/bin/oden\\\"}\")",
+    content="Ok(\"{\\\"sameCore\\\":true,\\\"runExecution\\\":\\\"embedded-v8\\\",\\\"runOutDir\\\":\\\".oden/run\\\",\\\"bundleTarget\\\":\\\"wasm\\\",\\\"hasFmt\\\":true,\\\"hasTask\\\":true,\\\"hasPlan\\\":true,\\\"execPath\\\":\\\"/mizchi-oden/bin/oden\\\"}\")",
   )
 }
 

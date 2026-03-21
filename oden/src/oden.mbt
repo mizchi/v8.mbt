@@ -41,7 +41,7 @@ fn oden_cli_compat_source() -> String {
   "if (typeof oden.exitCode !== 'number') oden.exitCode = 0; " +
   "if (typeof oden.cli !== 'object' || oden.cli === null) oden.cli = {}; " +
   "const cli = oden.cli; " +
-  "const cliCommands = typeof cli.commands === 'object' && cli.commands !== null ? cli.commands : (cli.commands = { run: { name: 'run', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'build MoonBit JS and execute the entry module' }, check: { name: 'check', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'type-check MoonBit sources for JS/WASM-first targets' }, test: { name: 'test', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'run MoonBit tests with JS/WASM-first outputs' }, bundle: { name: 'bundle', primaryLanguage: 'moonbit', defaultTarget: 'wasm', defaultOutDir: '.oden/build/wasm-gc', firstClassTargets: ['js', 'wasm'], description: 'bundle MoonBit JS/WASM artifacts for distribution' }, fmt: { name: 'fmt', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'format MoonBit sources' }, info: { name: 'info', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'emit MoonBit public API information for JS/WASM-first targets' }, task: { name: 'task', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'run project automation tasks through just' }, plan: { name: 'plan', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'print the translated execution plan without running it' } }); " +
+  "const cliCommands = typeof cli.commands === 'object' && cli.commands !== null ? cli.commands : (cli.commands = { run: { name: 'run', primaryLanguage: 'moonbit', execution: 'embedded-v8', defaultTarget: 'js', defaultOutDir: '.oden/run', firstClassTargets: ['js', 'wasm'], description: 'build MoonBit JS and execute the entry module on the embedded V8 runtime' }, check: { name: 'check', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'type-check MoonBit sources for JS/WASM-first targets' }, test: { name: 'test', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'run MoonBit tests with JS/WASM-first outputs' }, bundle: { name: 'bundle', primaryLanguage: 'moonbit', defaultTarget: 'wasm', defaultOutDir: '.oden/build/wasm-gc', firstClassTargets: ['js', 'wasm'], description: 'bundle MoonBit JS/WASM artifacts for distribution' }, fmt: { name: 'fmt', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'format MoonBit sources' }, info: { name: 'info', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'emit MoonBit public API information for JS/WASM-first targets' }, task: { name: 'task', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'run project automation tasks through just' }, plan: { name: 'plan', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'print the translated execution plan without running it' } }); " +
   "if (typeof cli.command !== 'function') cli.command = function(name){ const key = String(name ?? ''); return Object.prototype.hasOwnProperty.call(cliCommands, key) ? cliCommands[key] : null; }; " +
   "if (typeof cli.commandNames !== 'function') cli.commandNames = function(){ return Object.keys(cliCommands); }; " +
   "if (!Object.prototype.hasOwnProperty.call(oden, 'core')) Object.defineProperty(oden, 'core', { configurable: true, enumerable: true, get: function(){ return requireDeno().core; } }); " +
@@ -114,6 +114,7 @@ pub fn plan_json(plan : OdenCliPlan) -> String {
   values.set("name", Json::string(plan.name))
   values.set("kind", Json::string(plan.kind))
   values.set("program", Json::string(plan.program))
+  values.set("execution", Json::string("subprocess"))
   let argv : Array[Json] = []
   plan.argv.each(arg => argv.push(Json::string(arg)))
   values.set("argv", Json::array(argv))
@@ -126,6 +127,16 @@ pub fn plan_json(plan : OdenCliPlan) -> String {
     },
   )
   values.set("target", Json::string(plan.target))
+  match embedded_v8_run_plan(plan) {
+    Some((build_argv, guest_argv, out_dir)) => {
+      values.set("execution", Json::string("embedded-v8"))
+      values.set("buildProgram", Json::string("moon"))
+      values.set("buildArgv", json_string_array(build_argv))
+      values.set("guestArgv", json_string_array(guest_argv))
+      values.set("outDir", Json::string(out_dir))
+    }
+    None => ()
+  }
   Json::object(values).stringify()
 }
 
@@ -142,6 +153,68 @@ fn find_flag_value(args : Array[String], flag : String) -> String? {
     }
   }
   None
+}
+
+///|
+fn json_string_array(values : Array[String]) -> Json {
+  Json::array(values.map(value => Json::string(value)))
+}
+
+///|
+fn run_target_dir() -> String {
+  ".oden/run"
+}
+
+///|
+fn split_embedded_run_args(
+  args : Array[String],
+) -> (Array[String], Array[String]) {
+  let moon_args : Array[String] = []
+  let guest_args : Array[String] = []
+  let mut after_delimiter = false
+  for i in 0..<args.length() {
+    let arg = args[i]
+    if !after_delimiter && arg == "--" {
+      after_delimiter = true
+      continue
+    }
+    if after_delimiter {
+      guest_args.push(arg)
+    } else {
+      moon_args.push(arg)
+    }
+  }
+  (moon_args, guest_args)
+}
+
+///|
+fn embedded_v8_run_plan(
+  plan : OdenCliPlan,
+) -> (Array[String], Array[String], String)? {
+  if plan.kind != "run" || plan.target != "js" {
+    return None
+  }
+  let package_path = if plan.argv.length() > 1 &&
+    plan.argv[1] != "--" &&
+    !starts_with_option(plan.argv[1]) {
+    plan.argv[1]
+  } else {
+    "src/main"
+  }
+  let trailing = if plan.argv.length() > 2 {
+    plan.argv[2:].to_array()
+  } else {
+    []
+  }
+  let (moon_args, guest_args) = split_embedded_run_args(trailing)
+  let build_argv : Array[String] = ["build", package_path]
+  moon_args.each(arg => build_argv.push(arg))
+  let out_dir = plan.out_dir.unwrap_or(run_target_dir())
+  if find_flag_value(moon_args, "--target-dir") is None {
+    build_argv.push("--target-dir")
+    build_argv.push(out_dir)
+  }
+  Some((build_argv, guest_args, out_dir))
 }
 
 ///|
@@ -207,6 +280,32 @@ fn route_exec_moon_command(
           None => "none"
         }
     },
+  })
+}
+
+///|
+fn route_run_command(args : Array[String]) -> OdenCliRoute {
+  let (path, extra_args) = match args {
+    [first, .. rest] if !starts_with_option(first) =>
+      (Some(first), rest.to_array())
+    _ => (None, args)
+  }
+  let target = find_flag_value(extra_args, "--target").unwrap_or("js")
+  let out_dir = if target == "js" {
+    Some(
+      find_flag_value(extra_args, "--target-dir").unwrap_or(run_target_dir()),
+    )
+  } else {
+    find_flag_value(extra_args, "--target-dir")
+  }
+  OdenCliRoute::Exec(OdenCliPlan::{
+    name: "run",
+    kind: "run",
+    program: "moon",
+    argv: build_plan_args("run", path, Some("src/main"), Some("js"), extra_args),
+    cwd: ".",
+    out_dir,
+    target,
   })
 }
 
@@ -289,16 +388,7 @@ pub fn route_cli(args : Array[String]) -> Result[OdenCliRoute, String] {
     ["--version", ..] => Ok(OdenCliRoute::Version)
     ["version", ..] => Ok(OdenCliRoute::Version)
     ["manifest", ..] => Ok(OdenCliRoute::Manifest)
-    ["run", .. rest] =>
-      Ok(
-        route_exec_moon_command(
-          "run",
-          "run",
-          Some("js"),
-          Some("src/main"),
-          rest.to_array(),
-        ),
-      )
+    ["run", .. rest] => Ok(route_run_command(rest.to_array()))
     ["check", .. rest] =>
       Ok(
         route_exec_moon_command(
