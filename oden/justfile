@@ -16,3 +16,6 @@ run:
 
 info:
     moon info --target {{target}}
+
+bench:
+    node scripts/bench-run.mjs

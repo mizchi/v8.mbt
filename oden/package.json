@@ -26,6 +26,7 @@
     "check": "just check",
     "test": "just test",
     "run": "just run",
-    "info": "just info"
+    "info": "just info",
+    "bench": "just bench"
   }
 }

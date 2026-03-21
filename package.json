@@ -31,6 +31,7 @@
     "oden:check": "just oden-check",
     "oden:test": "just oden-test",
     "oden:run": "just oden-run",
-    "oden:info": "just oden-info"
+    "oden:info": "just oden-info",
+    "oden:bench": "just oden-bench"
   }
 }

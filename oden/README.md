@@ -34,6 +34,7 @@ CLI router は次を提供します。
 - `builder_new()` / `snapshot_builder_new()`: `Deno.core` + `Oden` CLI globals を preload した builder
 - `run_builder_new()` / `run_snapshot_builder_new()` / `run_image_new()`: `console` / `process.exit` / `Oden.__prepareRun` まで snapshot に固めた run 用 builder/image
 - `prepare_run_runtime(runtime, args)`: run image から作った isolate に guest args と exit code 初期値を流し込む
+- `just bench`: `bench/fixtures/run_sync` を使って `oden run` の hot/cold snapshot benchmark を取り、結果 JSON は `.oden/bench` に出力
 
 ```bash
 cd oden
@@ -46,7 +47,7 @@ moon run src/main --target native -- task
 moon run src/main --target native -- plan bundle app/main
 ```
 
-`run(js)` は subprocess ではなく、上の run image から V8 isolate を起こして guest code を評価します。なので guest の `stdout` / `stderr` / `process.exitCode` を `oden` 側に反映できます。repo 内で self-host smoke をするときは `moon run` より build 済み binary を project dir から直接叩く方が実利用に近いです。
+`run(js)` は subprocess ではなく、上の run image から V8 isolate を起こして guest code を評価します。なので guest の `stdout` / `stderr` / `process.exitCode` を `oden` 側に反映できます。さらに serialized run snapshot は guest project の `.oden/run/oden-run.snapshot.bin` にキャッシュされ、同じ project での warm run では再利用されます。repo 内で self-host smoke をするときは `moon run` より build 済み binary を project dir から直接叩く方が実利用に近いです。
 
 ```bash
 moon -C oden build src/main --target native

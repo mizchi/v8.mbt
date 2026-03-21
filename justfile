@@ -43,6 +43,9 @@ oden-run:
 oden-info:
     moon -C oden info --target {{target}}
 
+oden-bench:
+    node oden/scripts/bench-run.mjs
+
 info-check:
     moon info
     git diff --exit-code -- ':(glob)**/*.generated.mbti'

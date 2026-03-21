@@ -19,6 +19,11 @@ async fn write_text_file(path : String, content : String) -> Unit {
 }
 
 ///|
+fn cache_snapshot_path(target_dir : String) -> String {
+  join_path(target_dir, "oden-run.snapshot.bin")
+}
+
+///|
 fn new_run_runtime() -> Result[@v8.Runtime, String] {
   let runtime = @oden.run_builder_new().build()
   guard runtime is Ok(_) else { return Err(runtime.unwrap_err().to_string()) }
@@ -227,4 +232,31 @@ async test "execute js run plan builds temp module and runs through v8" {
   write_temp_run_module(dir, async_main=true)
   let result = execute_js_run_plan_in_cwd(test_run_plan(["run"]), dir)
   inspect(result, content="Ok(0)")
+}
+
+///|
+async test "run image cache is materialized under target dir" {
+  let dir = "/tmp/mizchi_v8_oden_run_cache_probe"
+  ensure_dir(dir)
+  let target_dir = dir + "/.oden/run"
+  let result = match load_run_runtime(target_dir) {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      match
+        runtime.eval_json(
+          "({ hasPrepareRun: typeof Oden.__prepareRun === 'function' })",
+        ) {
+        Ok(value) => Ok(value)
+        Err(err) => Err(err.to_string())
+      }
+    }
+    Err(err) => Err(err)
+  }
+  let cache_exists = @fs.read_file(cache_snapshot_path(target_dir)).binary() catch {
+    _ => Bytes::default()
+  }
+  inspect(
+    result.map(value => value + ":" + (cache_exists.length() > 0).to_string()),
+    content="Ok(\"{\\\"hasPrepareRun\\\":true}:true\")",
+  )
 }

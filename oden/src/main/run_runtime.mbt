@@ -363,6 +363,74 @@ async fn flush_js_run_output(result : OdenJsRunResult) -> Unit {
 }
 
 ///|
+fn run_snapshot_cache_path(target_dir : String) -> String {
+  join_path(target_dir, "oden-run.snapshot.bin")
+}
+
+///|
+async fn ensure_dir_exists(path : String) -> Unit {
+  @fs.mkdir(path, permission=0o755, recursive=true) catch {
+    _ => ()
+  }
+}
+
+///|
+async fn read_cached_run_snapshot(
+  target_dir : String,
+) -> Result[Bytes, String]? {
+  let snapshot_path = run_snapshot_cache_path(target_dir)
+  let snapshot = @fs.read_file(snapshot_path).binary() catch {
+    _ => return None
+  }
+  Some(Ok(snapshot))
+}
+
+///|
+async fn build_and_cache_run_snapshot(
+  target_dir : String,
+) -> Result[Bytes, String] {
+  let snapshot = @oden.run_snapshot_builder_new().build()
+  guard snapshot is Ok(_) else { return Err(snapshot.unwrap_err().to_string()) }
+  let snapshot = snapshot.unwrap()
+  ensure_dir_exists(target_dir)
+  let snapshot_path = run_snapshot_cache_path(target_dir)
+  @fs.write_file(snapshot_path, snapshot, create=0o644) catch {
+    _ => ()
+  }
+  Ok(snapshot)
+}
+
+///|
+async fn load_run_snapshot(target_dir : String) -> Result[Bytes, String] {
+  match read_cached_run_snapshot(target_dir) {
+    Some(result) => result
+    None => build_and_cache_run_snapshot(target_dir)
+  }
+}
+
+///|
+fn build_runtime_from_run_snapshot(
+  snapshot : Bytes,
+) -> Result[@v8.Runtime, String] {
+  let runtime = @v8.runtime_new_with_snapshot(snapshot)
+  guard runtime is Ok(_) else { return Err(runtime.unwrap_err().to_string()) }
+  let runtime = runtime.unwrap()
+  let installed = runtime.install_deno_core_compat()
+  guard installed is Ok(_) else {
+    runtime.dispose()
+    return Err(installed.unwrap_err().to_string())
+  }
+  Ok(runtime)
+}
+
+///|
+async fn load_run_runtime(target_dir : String) -> Result[@v8.Runtime, String] {
+  let snapshot = load_run_snapshot(target_dir)
+  guard snapshot is Ok(_) else { return Err(snapshot.unwrap_err()) }
+  build_runtime_from_run_snapshot(snapshot.unwrap())
+}
+
+///|
 pub async fn execute_run_plan(plan : @oden.OdenCliPlan) -> Result[Int, String] {
   if plan.kind == "run" && plan.target == "js" {
     execute_js_run_plan(plan)
@@ -410,10 +478,10 @@ async fn execute_js_run_plan_in_cwd(
       invocation.is_release,
     ),
   )
-  let image = @oden.run_image_new()
-  guard image is Ok(_) else { return Err(image.unwrap_err().to_string()) }
-  let runtime = image.unwrap().build_runtime()
-  guard runtime is Ok(_) else { return Err(runtime.unwrap_err().to_string()) }
+  let runtime = load_run_runtime(
+    resolve_path(invocation.cwd, invocation.target_dir),
+  )
+  guard runtime is Ok(_) else { return Err(runtime.unwrap_err()) }
   let runtime = runtime.unwrap()
   defer runtime.dispose()
   let executed = run_built_js_on_runtime(
