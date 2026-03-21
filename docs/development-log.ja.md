@@ -63,9 +63,9 @@
 - native target のみを対象にしている
 - 互換層はまだ部分実装で、Deno 側は opt-in の `Deno.core` op/util shim と最小の top-level `Deno` helper、Node 側は `global` / `process` / `Buffer` の最小 shim に限る
 - 非同期 host 連携は queue ベースの op に加えて direct callback / result callback でも扱え、失敗 reason には String だけでなく JSON value も使える
-- embedder 側 resource table を持てるようになり、`Deno.core.resources` / `close` / `tryClose` はその table を参照する
+- embedder 側 resource table を持てるようになり、`Deno.core.resources` / `close` / `tryClose` はその table を参照し、resource ごとに ref state も持てる
 - MoonBit async event loop で Deno 風 pending op を駆動できるが、同時に回せる loop は 1 runtime あたり 1 本で、同じ lane の手動 `take_async_*_op` loop とは混在させない前提
-- `Deno.sleep` と最小 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` は hidden async op として MoonBit async event loop に載せている
+- `Deno.sleep` と最小 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` は hidden async op として MoonBit async event loop に載せつつ、sleep/timer resource としても見える
 - `with_runtime_async` と `eval_promise_*_async` で、PromiseHandle を手でつながなくても MoonBit async 側から同じ loop を使える
 - top-level await module も `Runtime::eval_module_handle_string_async` で同じ loop に直接載せられる
 - 現状は mooncakes から import する consumer module 側にも 1 回限りの設定が必要だが、同梱 setup script で一般的な導線を自動化でき、local path dependency でも `--build-bridge` を付ければ bridge build まで寄せられる

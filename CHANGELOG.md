@@ -18,9 +18,10 @@ All notable changes to this project should be documented in this file.
 - Opt-in `Deno.core` op shim helpers via `install_deno_core_compat` and `with_deno_core_compat`
 - Opt-in Node-style shim helpers via `install_node_compat` and `with_node_compat`
 - Shared compat helpers split out from Deno / Node shims, with Deno utility helpers expanded around `Deno.core` and minimal top-level `Deno` metadata
-- Runtime-side resource table helpers via `add_resource`, `list_resources`, and `close_resource`
+- Runtime-side resource table helpers via `add_resource`, `ref_resource`, `unref_resource`, `list_resources`, and `close_resource`
 - `Deno.core.resources` / `close` / `tryClose` backed by the runtime resource table
 - `Deno.sleep` plus minimal `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` on top of the MoonBit async event loop
+- `Deno.core.refOpPromise` / `unrefOpPromise` now toggle real resource ref state, and sleep/op promises are tracked as resources
 - `with_deno_core_compat` now installs the runtime hooks needed by those helpers when building runtimes from builders/images
 - MoonBit async event-loop bridge for Deno-style pending ops via `register_async_*_task_*`, `PromiseHandle::await_*_async`, and `ModuleEvalHandle::await_ready_async`
 - Async convenience helpers via `with_runtime_async`, `with_runtime_with_snapshot_async`, and `eval_promise_*_async`

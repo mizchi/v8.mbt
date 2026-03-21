@@ -186,6 +186,12 @@ test "runtime can manage resource table" {
     let entries = listed.unwrap()
     let first_name = runtime.get_resource_name(stdin.unwrap())
     guard first_name is Ok(_) else { return Err(first_name.unwrap_err()) }
+    let unrefed = runtime.unref_resource(stdin.unwrap())
+    guard unrefed is Ok(_) else { return Err(unrefed.unwrap_err()) }
+    let after_unref = runtime.list_resources()
+    guard after_unref is Ok(_) else { return Err(after_unref.unwrap_err()) }
+    let refed = runtime.ref_resource(stdin.unwrap())
+    guard refed is Ok(_) else { return Err(refed.unwrap_err()) }
     let closed = runtime.try_close_resource(stdout.unwrap())
     guard closed is Ok(_) else { return Err(closed.unwrap_err()) }
     let missing = runtime.try_close_resource(stdout.unwrap())
@@ -205,6 +211,12 @@ test "runtime can manage resource table" {
       ":" +
       first_name.unwrap().unwrap_or("") +
       ":" +
+      unrefed.unwrap().to_string() +
+      ":" +
+      after_unref.unwrap()[0].is_ref.to_string() +
+      ":" +
+      refed.unwrap().to_string() +
+      ":" +
       closed.unwrap().to_string() +
       ":" +
       missing.unwrap().to_string() +
@@ -214,7 +226,10 @@ test "runtime can manage resource table" {
       closed_count.val.to_string(),
     )
   })
-  inspect(result, content="Ok(\"2:1:stdin:2:stdout:stdin:true:false:1:1\")")
+  inspect(
+    result,
+    content="Ok(\"2:1:stdin:2:stdout:stdin:true:false:true:true:false:1:1\")",
+  )
 }
 
 ///|
@@ -329,7 +344,7 @@ test "runtime can install deno core compat utility helpers" {
   })
   inspect(
     result,
-    content="Ok(\"{\\\"text\\\":\\\"AB\\\",\\\"before\\\":{\\\"1\\\":\\\"stdin\\\",\\\"2\\\":\\\"stdout\\\"},\\\"after\\\":{\\\"2\\\":\\\"stdout\\\"},\\\"closedAgain\\\":false,\\\"answer\\\":42,\\\"inspect\\\":\\\"{\\\\\\\"answer\\\\\\\":42}\\\",\\\"cwd\\\":\\\"/\\\",\\\"execPath\\\":\\\"/mizchi-v8/deno\\\",\\\"pid\\\":0,\\\"noColor\\\":false,\\\"exitCode\\\":0}\")",
+    content="Ok(\"{\\\"text\\\":\\\"AB\\\",\\\"before\\\":{\\\"1\\\":\\\"stdin\\\",\\\"2\\\":\\\"stdout\\\"},\\\"after\\\":{\\\"2\\\":\\\"stdout\\\",\\\"3\\\":\\\"promise\\\"},\\\"closedAgain\\\":false,\\\"answer\\\":42,\\\"inspect\\\":\\\"{\\\\\\\"answer\\\\\\\":42}\\\",\\\"cwd\\\":\\\"/\\\",\\\"execPath\\\":\\\"/mizchi-v8/deno\\\",\\\"pid\\\":0,\\\"noColor\\\":false,\\\"exitCode\\\":0}\")",
   )
 }
 
@@ -1786,6 +1801,110 @@ async test "with_runtime_async can clear timeout in deno compat" {
     )
   })
   inspect(result, content="Ok(\"{\\\"value\\\":\\\"A\\\"}\")")
+}
+
+///|
+async test "with_runtime_async deno sleep resource tracks ref and settles" {
+  let result = match runtime_new() {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      let installed = runtime.install_deno_core_compat()
+      guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+      let prepared = runtime.eval_promise_json_async(
+        "(async () => { globalThis.__sleep_promise = Deno.sleep(20); Deno.core.unrefOpPromise(globalThis.__sleep_promise); return { resourceCount: Object.keys(Deno.core.resources()).length }; })()",
+      )
+      guard prepared is Ok(_) else { Err(prepared.unwrap_err()) }
+      let after_unref = runtime.list_resources()
+      guard after_unref is Ok(_) else { Err(after_unref.unwrap_err()) }
+      let reffed = runtime.eval_promise_json_async(
+        "(async () => { Deno.core.refOpPromise(globalThis.__sleep_promise); return { resourceCount: Object.keys(Deno.core.resources()).length }; })()",
+      )
+      guard reffed is Ok(_) else { Err(reffed.unwrap_err()) }
+      let after_ref = runtime.list_resources()
+      guard after_ref is Ok(_) else { Err(after_ref.unwrap_err()) }
+      let settled = runtime.eval_promise_json_async(
+        "(async () => { await globalThis.__sleep_promise; return { resourceCount: Object.keys(Deno.core.resources()).length }; })()",
+      )
+      guard settled is Ok(_) else { Err(settled.unwrap_err()) }
+      Ok(
+        prepared.unwrap() +
+        ":" +
+        after_unref.unwrap()[0].name +
+        ":" +
+        after_unref.unwrap()[0].is_ref.to_string() +
+        ":" +
+        reffed.unwrap() +
+        ":" +
+        after_ref.unwrap()[0].is_ref.to_string() +
+        ":" +
+        settled.unwrap(),
+      )
+    }
+    Err(err) => Err(err)
+  }
+  inspect(
+    result,
+    content="Ok(\"{\\\"resourceCount\\\":1}:sleep:false:{\\\"resourceCount\\\":1}:true:{\\\"resourceCount\\\":0}\")",
+  )
+}
+
+///|
+async test "with_runtime_async deno close can cancel timeout resource" {
+  let result = with_runtime_async(runtime => {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+    runtime.eval_promise_json_async(
+      "(async () => { let value = 'A'; const rid = setTimeout(() => { value = 'B'; }, 20); const before = Deno.core.resources(); const closed = Deno.core.tryClose(rid); await Deno.sleep(30); return { value, closed, before, after: Deno.core.resources() }; })()",
+    )
+  })
+  inspect(
+    result,
+    content="Ok(\"{\\\"value\\\":\\\"A\\\",\\\"closed\\\":true,\\\"before\\\":{\\\"1\\\":\\\"timeout\\\"},\\\"after\\\":{}}\")",
+  )
+}
+
+///|
+async test "with_runtime_async deno op promise ref and unref toggle resource state" {
+  let result = match runtime_new() {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      let installed = runtime.install_deno_core_compat()
+      guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+      let registered = runtime.register_async_json_task_result_callback("add", payload => {
+        @async.sleep(20)
+        if payload == "{\"base\":40}" {
+          Ok("{\"answer\":42}")
+        } else {
+          Err("blocked")
+        }
+      })
+      guard registered is Ok(_) else { Err(registered.unwrap_err()) }
+      let prepared = runtime.eval_promise_json_async(
+        "(async () => { globalThis.__op_promise = Deno.core.opAsync(Deno.core.ops.add, { base: 40 }); Deno.core.unrefOpPromise(globalThis.__op_promise); return { resourceCount: Object.keys(Deno.core.resources()).length }; })()",
+      )
+      guard prepared is Ok(_) else { Err(prepared.unwrap_err()) }
+      let after_unref = runtime.list_resources()
+      guard after_unref is Ok(_) else { Err(after_unref.unwrap_err()) }
+      let settled = runtime.eval_promise_json_async(
+        "(async () => { Deno.core.refOpPromise(globalThis.__op_promise); const payload = await globalThis.__op_promise; return { answer: payload.answer, resourceCount: Object.keys(Deno.core.resources()).length }; })()",
+      )
+      guard settled is Ok(_) else { Err(settled.unwrap_err()) }
+      Ok(
+        prepared.unwrap() +
+        ":" +
+        after_unref.unwrap()[0].name +
+        ":" +
+        after_unref.unwrap()[0].is_ref.to_string() +
+        ":" +
+        settled.unwrap(),
+      )
+    }
+    Err(err) => Err(err)
+  }
+  inspect(
+    result,
+    content="Ok(\"{\\\"resourceCount\\\":1}:promise:false:{\\\"answer\\\":42,\\\"resourceCount\\\":0}\")",
+  )
 }
 
 ///|

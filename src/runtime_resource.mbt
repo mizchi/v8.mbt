@@ -35,6 +35,7 @@ fn runtime_add_resource_entry(
   runtime : Runtime,
   name : String,
   on_close : (() -> Unit)?,
+  is_ref : Bool,
 ) -> Result[Int, V8Error] {
   let open = ensure_resource_runtime_open(runtime)
   guard open is Ok(_) else { return Err(open.unwrap_err()) }
@@ -43,8 +44,44 @@ fn runtime_add_resource_entry(
   runtime.state.val.resources.entries.set(rid, RuntimeResourceEntry::{
     name,
     on_close,
+    is_ref,
   })
   Ok(rid)
+}
+
+///|
+fn runtime_resource_exists(
+  runtime : Runtime,
+  rid : Int,
+) -> Result[Bool, V8Error] {
+  let open = ensure_resource_runtime_open(runtime)
+  guard open is Ok(_) else { return Err(open.unwrap_err()) }
+  Ok(runtime.state.val.resources.entries.contains(rid))
+}
+
+///|
+fn runtime_set_resource_ref_state(
+  runtime : Runtime,
+  rid : Int,
+  is_ref : Bool,
+) -> Result[Bool, V8Error] {
+  let open = ensure_resource_runtime_open(runtime)
+  guard open is Ok(_) else { return Err(open.unwrap_err()) }
+  let mut changed = false
+  runtime.state.val.resources.entries.update(rid, entry => {
+    match entry {
+      Some(entry) => {
+        changed = true
+        Some(RuntimeResourceEntry::{
+          name: entry.name,
+          on_close: entry.on_close,
+          is_ref,
+        })
+      }
+      None => None
+    }
+  })
+  Ok(changed)
 }
 
 ///|
@@ -81,7 +118,7 @@ pub fn Runtime::add_resource(
   self : Runtime,
   name : String,
 ) -> Result[Int, V8Error] {
-  runtime_add_resource_entry(self, name, None)
+  runtime_add_resource_entry(self, name, None, true)
 }
 
 ///|
@@ -90,7 +127,23 @@ pub fn Runtime::add_resource_with_close(
   name : String,
   on_close : () -> Unit,
 ) -> Result[Int, V8Error] {
-  runtime_add_resource_entry(self, name, Some(on_close))
+  runtime_add_resource_entry(self, name, Some(on_close), true)
+}
+
+///|
+pub fn Runtime::ref_resource(
+  self : Runtime,
+  rid : Int,
+) -> Result[Bool, V8Error] {
+  runtime_set_resource_ref_state(self, rid, true)
+}
+
+///|
+pub fn Runtime::unref_resource(
+  self : Runtime,
+  rid : Int,
+) -> Result[Bool, V8Error] {
+  runtime_set_resource_ref_state(self, rid, false)
 }
 
 ///|
@@ -111,7 +164,11 @@ pub fn Runtime::list_resources(
   guard open is Ok(_) else { return Err(open.unwrap_err()) }
   let resources : Array[RuntimeResource] = []
   self.state.val.resources.entries.each((rid, entry) => {
-    resources.push(RuntimeResource::{ rid, name: entry.name })
+    resources.push(RuntimeResource::{
+      rid,
+      name: entry.name,
+      is_ref: entry.is_ref,
+    })
   })
   resources.sort_by((left, right) => left.rid - right.rid)
   Ok(resources)

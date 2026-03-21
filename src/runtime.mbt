@@ -22,6 +22,7 @@ priv struct RuntimeAsyncLoopState {
 priv struct RuntimeResourceEntry {
   name : String
   on_close : (() -> Unit)?
+  is_ref : Bool
 }
 
 ///|
@@ -40,6 +41,7 @@ priv struct RuntimeCompatState {
 pub struct RuntimeResource {
   rid : Int
   name : String
+  is_ref : Bool
 }
 
 ///|

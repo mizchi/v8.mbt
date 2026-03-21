@@ -195,6 +195,7 @@ pub fn Runtime::load_modules(Self, Array[ModuleSource]) -> Result[Unit, V8Error]
 pub fn Runtime::perform_microtask_checkpoint(Self) -> Result[Unit, V8Error]
 pub fn Runtime::push_sync_bytes_op_response(Self, String, Bytes, Bytes) -> Result[Unit, V8Error]
 pub fn Runtime::push_sync_json_op_response(Self, String, String, String) -> Result[Unit, V8Error]
+pub fn Runtime::ref_resource(Self, Int) -> Result[Bool, V8Error]
 pub fn Runtime::register_async_bytes_callback(Self, String, (Bytes) -> Bytes) -> Result[Unit, V8Error]
 pub fn Runtime::register_async_bytes_op(Self, String) -> Result[Unit, V8Error]
 pub fn Runtime::register_async_bytes_result_callback(Self, String, (Bytes) -> Result[Bytes, String]) -> Result[Unit, V8Error]
@@ -230,6 +231,7 @@ pub fn Runtime::take_async_json_op(Self) -> Result[AsyncJsonOpRequest?, V8Error]
 pub fn Runtime::take_sync_bytes_op(Self) -> Result[SyncBytesOpRequest?, V8Error]
 pub fn Runtime::take_sync_json_op(Self) -> Result[SyncJsonOpRequest?, V8Error]
 pub fn Runtime::try_close_resource(Self, Int) -> Result[Bool, V8Error]
+pub fn Runtime::unref_resource(Self, Int) -> Result[Bool, V8Error]
 
 pub struct RuntimeBuilder {
   // private fields
@@ -260,6 +262,7 @@ type RuntimeImageState
 pub struct RuntimeResource {
   rid : Int
   name : String
+  is_ref : Bool
 }
 
 type RuntimeState

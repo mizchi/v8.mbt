@@ -130,10 +130,10 @@ match @v8.runtime_new() {
 - bootstrap: `Runtime::load_module`, `RuntimeBuilder`, `SnapshotBuilder`, `RuntimeImage`
 - value bridge: `set/get/call_global_json`, `set/get/call_global_bytes`, `eval_json`, `eval_bytes`
 - host bridge: `register_*_callback`, `register_*_result_callback`, `register_*_result_callback_with_json_error`, `register_*_op`, `take_*_op`, `resolve_*_op`, `reject_*_op`, `reject_async_*_op_with_json`
-- resource table: `add_resource`, `add_resource_with_close`, `list_resources`, `close_resource`, `try_close_resource`
+- resource table: `add_resource`, `add_resource_with_close`, `ref_resource`, `unref_resource`, `list_resources`, `close_resource`, `try_close_resource`
 - direct async callback: `register_async_json_callback`, `register_async_bytes_callback`, `register_async_*_result_callback`
 - async event loop bridge: `with_runtime_async`, `register_async_*_task_*`, `eval_promise_*_async`, `PromiseHandle::await_*_async`, `ModuleEvalHandle::await_ready_async`, `Runtime::eval_module_handle_string_async`
-- deno compat: `Runtime::install_deno_core_compat`, `RuntimeBuilder::with_deno_core_compat`, `SnapshotBuilder::with_deno_core_compat`, `Deno.sleep`, minimal `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval`
+- deno compat: `Runtime::install_deno_core_compat`, `RuntimeBuilder::with_deno_core_compat`, `SnapshotBuilder::with_deno_core_compat`, `Deno.sleep`, minimal `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval`, `Deno.core.refOpPromise` / `unrefOpPromise`
 - minimal node shim: `Runtime::install_node_compat`, `RuntimeBuilder::with_node_compat`, `SnapshotBuilder::with_node_compat`
 - Failure reasons can be returned as JSON values in addition to plain strings.
 
@@ -144,7 +144,7 @@ For the complete public surface and more examples, see [src/README.mbt.md](src/R
 - native target only
 - this project primarily targets low-level embedder bindings; Deno compatibility is currently limited to an opt-in `Deno.core` op/util shim plus a few top-level `Deno` helpers, and Node compatibility to a minimal `global` / `process` / `Buffer` shim
 - the MoonBit async event-loop driver allows only one active loop per runtime and assumes you do not mix it with manual `take_async_*_op` handling on the same lane
-- `Deno.sleep` and the minimal `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` shim are built on queue-based async ops, so they are intended to run through the MoonBit async event-loop driver path (`with_runtime_async`, `eval_promise_*_async`, or `PromiseHandle::await_*_async`)
+- `Deno.sleep` and the minimal `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` shim are built on queue-based async ops and also occupy runtime resource entries; `Deno.core.refOpPromise` / `unrefOpPromise` update that ref state
 - mooncakes consumers still need a one-time setup step today
 - local path dependencies do not run install hooks automatically, but `setup-consumer.mjs --build-bridge` can cover the same bootstrap step
 

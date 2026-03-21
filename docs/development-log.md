@@ -63,9 +63,9 @@ This document tracks the implementation status, design notes, and known limitati
 - native target only
 - compatibility is still partial: Deno is limited to an opt-in `Deno.core` op/util shim plus a few top-level `Deno` helpers, and Node to a minimal `global` / `process` / `Buffer` shim
 - async host integration can now use queue-based ops, direct callbacks, and result callbacks, and failure reasons can be passed as JSON values as well as plain strings
-- the runtime now has an embedder-side resource table, and `Deno.core.resources` / `close` / `tryClose` are backed by that table
+- the runtime now has an embedder-side resource table, and `Deno.core.resources` / `close` / `tryClose` are backed by that table with per-resource ref state
 - the MoonBit async event-loop driver can now drive Deno-style pending ops, but it allows only one active loop per runtime and assumes you do not mix it with manual `take_async_*_op` handling on the same lane
-- `Deno.sleep` and the minimal `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` shim now run as hidden async ops on top of that MoonBit async event loop
+- `Deno.sleep` and the minimal `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` shim now run as hidden async ops on top of that MoonBit async event loop and also occupy timer resources
 - `with_runtime_async` and `eval_promise_*_async` now let MoonBit async code use that same loop without wiring `PromiseHandle` manually
 - top-level await modules can now be driven through the same path with `Runtime::eval_module_handle_string_async`
 - consumer modules still need one-time setup when importing this package from mooncakes today, although the bundled setup script now automates the common path and can also build the bridge for local path dependencies via `--build-bridge`
