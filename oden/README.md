@@ -18,13 +18,13 @@ just run
 
 CLI router は次を提供します。
 
-- `run`: JS-first 既定で `moon build` した JS artifact を `mizchi/v8` runtime で実行し、build 出力先の既定は `.oden/run`
+- `run`: JS-first 既定では `moon build` した JS artifact を `mizchi/v8` runtime で実行し、build 出力先の既定は `.oden/run`。`--target wasm` / `wasm-gc` / `native` など JS 以外では `moon run` subprocess に委譲
 - `check` / `test`: JS-first 既定で `moon` command に変換
 - `bundle`: wasm-first 既定で `moon build` に変換し、`--target-dir` 未指定なら `.oden/build/<target>` を使う
 - `fmt`: `moon fmt` へそのまま転送
 - `info`: JS-first 既定で `moon info` に変換
 - `task`: `just` へ変換し、引数なしなら `just --summary`
-- `plan`: 実行せずに変換結果を JSON で表示。`run(js)` の場合は `execution: "embedded-v8"` に加えて `buildArgv` / `guestArgv` / `outDir` も含む
+- `plan`: 実行せずに変換結果を JSON で表示。`run(js)` の場合は `execution: "embedded-v8"` に加えて `buildArgv` / `guestArgv` / `outDir` も含み、`run(--target wasm*)` では `execution: "subprocess"` のまま `moon run` plan を返す
 - `help` / `-h` / `--help`
 - `version` / `-V` / `--version`
 - `manifest`
@@ -40,7 +40,7 @@ moon run src/main --target native -- task
 moon run src/main --target native -- plan bundle app/main
 ```
 
-`run(js)` は subprocess ではなく埋め込み V8 runtime を使うので、repo 内で self-host smoke をするときは `moon run` より build 済み binary を project dir から直接叩く方が実利用に近いです。
+`run(js)` は subprocess ではなく埋め込み V8 runtime を使うので、guest の `stdout` / `stderr` / `process.exitCode` を `oden` 側に反映できます。repo 内で self-host smoke をするときは `moon run` より build 済み binary を project dir から直接叩く方が実利用に近いです。
 
 ```bash
 moon -C oden build src/main --target native

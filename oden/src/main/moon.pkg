@@ -1,9 +1,11 @@
 import {
   "moonbitlang/core/json" @json,
+  "moonbitlang/core/strconv" @strconv,
   "moonbitlang/core/env",
   "moonbitlang/async",
   "moonbitlang/async/fs" @fs,
   "moonbitlang/async/process",
+  "moonbitlang/async/stdio" @stdio,
   "mizchi/oden" @oden,
   "mizchi/v8" @v8,
 }

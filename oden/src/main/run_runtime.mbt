@@ -9,6 +9,13 @@ struct OdenRunInvocation {
 }
 
 ///|
+struct OdenJsRunResult {
+  exit_code : Int
+  stdout_lines : Array[String]
+  stderr_lines : Array[String]
+}
+
+///|
 fn default_run_target_dir() -> String {
   ".oden/run"
 }
@@ -200,24 +207,42 @@ fn guest_args_json(guest_args : Array[String]) -> String {
 }
 
 ///|
-fn install_console_shim(runtime : @v8.Runtime) -> Result[Unit, String] {
-  let registered = runtime.register_sync_json_callback(
-    "__oden_console_print__",
+fn console_payload_text(payload : String) -> String {
+  let parsed = @json.parse(payload) catch { _ => Json::string(payload) }
+  match parsed {
+    String(text) => text
+    _ => parsed.stringify()
+  }
+}
+
+///|
+fn install_console_shim(
+  runtime : @v8.Runtime,
+  stdout_lines : Ref[Array[String]],
+  stderr_lines : Ref[Array[String]],
+) -> Result[Unit, String] {
+  let stdout_registered = runtime.register_sync_json_callback(
+    "__oden_console_stdout__",
     payload => {
-      let parsed = @json.parse(payload) catch { _ => Json::string(payload) }
-      let text = match parsed {
-        String(text) => text
-        _ => parsed.stringify()
-      }
-      println(text)
+      stdout_lines.val.push(console_payload_text(payload))
       "null"
     },
   )
-  guard registered is Ok(_) else {
-    return Err(registered.unwrap_err().to_string())
+  guard stdout_registered is Ok(_) else {
+    return Err(stdout_registered.unwrap_err().to_string())
+  }
+  let stderr_registered = runtime.register_sync_json_callback(
+    "__oden_console_stderr__",
+    payload => {
+      stderr_lines.val.push(console_payload_text(payload))
+      "null"
+    },
+  )
+  guard stderr_registered is Ok(_) else {
+    return Err(stderr_registered.unwrap_err().to_string())
   }
   let installed = runtime.eval_string_with_name(
-    "file:///compat/oden-console.js", "(function(){ const format = function(value){ if (typeof value === 'string') return value; try { const text = JSON.stringify(value); return text === undefined ? String(value) : text; } catch (_) { return String(value); } }; const print = function(args){ const text = Array.prototype.slice.call(args).map(format).join(' '); MoonBit.opSync('__oden_console_print__', text); }; globalThis.console = { log: function(...args){ print(args); }, error: function(...args){ print(args); }, warn: function(...args){ print(args); } }; })()",
+    "file:///compat/oden-console.js", "(function(){ const root = globalThis; const oden = root.Oden ?? (root.Oden = {}); const format = function(value){ if (typeof value === 'string') return value; try { const text = JSON.stringify(value); return text === undefined ? String(value) : text; } catch (_) { return String(value); } }; const write = function(op, args){ const text = Array.prototype.slice.call(args).map(format).join(' '); MoonBit.opSync(op, text); }; root.console = { log: function(...args){ write('__oden_console_stdout__', args); }, info: function(...args){ write('__oden_console_stdout__', args); }, debug: function(...args){ write('__oden_console_stdout__', args); }, error: function(...args){ write('__oden_console_stderr__', args); }, warn: function(...args){ write('__oden_console_stderr__', args); } }; const process = (typeof root.process === 'object' && root.process !== null) ? root.process : (root.process = {}); if (typeof process.exitCode !== 'number') process.exitCode = 0; const exitImpl = function(code){ const next = Number.isFinite(code) ? (code | 0) : 1; oden.exitCode = next; process.exitCode = next; return next; }; process.exit = exitImpl; if (typeof oden.exitCode !== 'number') oden.exitCode = 0; oden.exit = exitImpl; })()",
   )
   guard installed is Ok(_) else {
     return Err(installed.unwrap_err().to_string())
@@ -254,16 +279,53 @@ fn script_resource_name(path : String) -> String {
 }
 
 ///|
+fn read_guest_exit_code(runtime : @v8.Runtime) -> Result[Int, String] {
+  let value = runtime.eval_string(
+    "(function(){ const oden = globalThis.Oden; const process = globalThis.process; if (typeof process === 'object' && process !== null && typeof process.exitCode === 'number') return String(process.exitCode | 0); if (typeof oden === 'object' && oden !== null && typeof oden.exitCode === 'number') return String(oden.exitCode | 0); return '0'; })()",
+  )
+  guard value is Ok(_) else { return Err(value.unwrap_err().to_string()) }
+  try @strconv.parse_int(value.unwrap()) |> Ok catch {
+    err => Err("failed to parse guest exit code: " + err.to_string())
+  }
+}
+
+///|
+fn guest_runtime_error_text(built_js_path : String, detail : String) -> String {
+  if detail.contains(built_js_path) {
+    detail
+  } else {
+    "oden run guest runtime error: " + built_js_path + "\n" + detail
+  }
+}
+
+///|
+fn make_js_run_result(
+  exit_code : Int,
+  stdout_lines : Ref[Array[String]],
+  stderr_lines : Ref[Array[String]],
+) -> OdenJsRunResult {
+  OdenJsRunResult::{
+    exit_code,
+    stdout_lines: stdout_lines.val.copy(),
+    stderr_lines: stderr_lines.val.copy(),
+  }
+}
+
+///|
 async fn run_built_js_on_runtime(
   runtime : @v8.Runtime,
   built_js_path : String,
   guest_args : Array[String],
-) -> Result[Unit, String] {
+) -> Result[OdenJsRunResult, String] {
+  let stdout_lines = Ref::new([])
+  let stderr_lines = Ref::new([])
   let installed = @oden.install(runtime)
   guard installed is Ok(_) else {
     return Err(installed.unwrap_err().to_string())
   }
-  let console_installed = install_console_shim(runtime)
+  let console_installed = install_console_shim(
+    runtime, stdout_lines, stderr_lines,
+  )
   guard console_installed is Ok(_) else {
     return Err(console_installed.unwrap_err())
   }
@@ -278,18 +340,58 @@ async fn run_built_js_on_runtime(
     source,
   )
   guard evaluated is Ok(_) else {
-    return Err(evaluated.unwrap_err().to_string())
+    stderr_lines.val.push(
+      guest_runtime_error_text(
+        built_js_path,
+        evaluated.unwrap_err().to_string(),
+      ),
+    )
+    return Ok(make_js_run_result(1, stdout_lines, stderr_lines))
   }
   let drained = runtime.run_event_loop_until_idle_async()
-  guard drained is Ok(_) else { return Err(drained.unwrap_err().to_string()) }
-  Ok(())
+  if drained is Err(err) {
+    stderr_lines.val.push(
+      guest_runtime_error_text(built_js_path, err.to_string()),
+    )
+    return Ok(make_js_run_result(1, stdout_lines, stderr_lines))
+  }
+  let exit_code = read_guest_exit_code(runtime)
+  guard exit_code is Ok(_) else { return Err(exit_code.unwrap_err()) }
+  Ok(make_js_run_result(exit_code.unwrap(), stdout_lines, stderr_lines))
 }
 
 ///|
-fn print_non_empty_output(text : String) -> Unit {
-  let trimmed = text.trim().to_string()
+async fn write_output_line(text : String, stderr? : Bool = false) -> Unit {
+  let out = if stderr { @stdio.stderr } else { @stdio.stdout }
+  out.write(text + "\n")
+}
+
+///|
+async fn write_non_empty_output(text : String, stderr? : Bool = false) -> Unit {
+  let trimmed = text.trim(chars="\r\n").to_string()
   if !trimmed.is_empty() {
-    println(trimmed)
+    write_output_line(trimmed, stderr~)
+  }
+}
+
+///|
+async fn flush_js_run_output(result : OdenJsRunResult) -> Unit {
+  for line in result.stdout_lines {
+    write_output_line(line)
+  }
+  for line in result.stderr_lines {
+    write_output_line(line, stderr=true)
+  }
+}
+
+///|
+pub async fn execute_run_plan(plan : @oden.OdenCliPlan) -> Result[Int, String] {
+  if plan.kind == "run" && plan.target == "js" {
+    execute_js_run_plan(plan)
+  } else {
+    try @process.run(plan.program, plan.argv, cwd=plan.cwd) |> Ok catch {
+      err => Err(err.to_string())
+    }
   }
 }
 
@@ -313,8 +415,8 @@ async fn execute_js_run_plan_in_cwd(
     cwd=invocation.cwd,
   )
   if code != 0 {
-    print_non_empty_output(stdout.text())
-    print_non_empty_output(stderr.text())
+    write_non_empty_output(stdout.text())
+    write_non_empty_output(stderr.text(), stderr=true)
     return Ok(code)
   }
   let module_config = read_module_config(invocation.cwd)
@@ -340,5 +442,7 @@ async fn execute_js_run_plan_in_cwd(
     invocation.guest_args,
   )
   guard executed is Ok(_) else { return Err(executed.unwrap_err()) }
-  Ok(0)
+  let executed = executed.unwrap()
+  flush_js_run_output(executed)
+  Ok(executed.exit_code)
 }

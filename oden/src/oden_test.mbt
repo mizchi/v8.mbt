@@ -61,6 +61,31 @@ test "oden routes run command to moon js target" {
 }
 
 ///|
+test "oden routes run command with wasm target to moon subprocess" {
+  let result = match route_cli(["run", "--target", "wasm-gc"]) {
+    Ok(OdenCliRoute::Exec(plan)) =>
+      plan.name +
+      ":" +
+      plan.program +
+      ":" +
+      plan.target +
+      ":" +
+      plan.out_dir.unwrap_or("none") +
+      ":" +
+      plan.argv[0] +
+      ":" +
+      plan.argv[1] +
+      ":" +
+      plan.argv[2] +
+      ":" +
+      plan.argv[3]
+    Ok(_) => "unexpected"
+    Err(err) => err
+  }
+  inspect(result, content="run:moon:wasm-gc:none:run:src/main:--target:wasm-gc")
+}
+
+///|
 test "oden routes bundle command to moon wasm build" {
   let result = match route_cli(["bundle", "app/main", "--release"]) {
     Ok(OdenCliRoute::Exec(plan)) =>
@@ -310,6 +335,25 @@ test "oden can stringify embedded v8 run plan json" {
     ":" +
     result.contains("\"outDir\":\".oden/run\"").to_string(),
     content="true:true:true:true:true",
+  )
+}
+
+///|
+test "oden can stringify wasm run subprocess plan json" {
+  let result = match route_cli(["plan", "run", "--target", "wasm"]) {
+    Ok(OdenCliRoute::Plan(plan)) => plan_json(plan)
+    Ok(_) => "unexpected"
+    Err(err) => err
+  }
+  inspect(
+    result.contains("\"execution\":\"subprocess\"").to_string() +
+    ":" +
+    result.contains("\"target\":\"wasm\"").to_string() +
+    ":" +
+    result.contains("\"outDir\":null").to_string() +
+    ":" +
+    result.contains("\"buildArgv\"").to_string(),
+    content="true:true:true:false",
   )
 }
 

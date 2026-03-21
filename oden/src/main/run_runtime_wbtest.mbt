@@ -134,11 +134,21 @@ async test "built js runtime runner sets args and drains timeout" {
       defer runtime.dispose()
       let executed = run_built_js_on_runtime(runtime, script_path, ["a", "b"])
       guard executed is Ok(_) else { Err(executed.unwrap_err()) }
+      let executed = executed.unwrap()
       match
         runtime.eval_json(
           "({ args: globalThis.__args, ticks: globalThis.__ticks })",
         ) {
-        Ok(value) => Ok(value)
+        Ok(value) =>
+          Ok(
+            value +
+            ":" +
+            executed.exit_code.to_string() +
+            ":" +
+            executed.stdout_lines.length().to_string() +
+            ":" +
+            executed.stderr_lines.length().to_string(),
+          )
         Err(err) => Err(err.to_string())
       }
     }
@@ -146,8 +156,62 @@ async test "built js runtime runner sets args and drains timeout" {
   }
   inspect(
     result,
-    content="Ok(\"{\\\"args\\\":[\\\"a\\\",\\\"b\\\"],\\\"ticks\\\":[\\\"tick\\\"]}\")",
+    content="Ok(\"{\\\"args\\\":[\\\"a\\\",\\\"b\\\"],\\\"ticks\\\":[\\\"tick\\\"]}:0:0:0\")",
   )
+}
+
+///|
+async test "built js runtime runner separates stdout stderr and exit code" {
+  let dir = "/tmp/mizchi_v8_oden_run_stdio_probe"
+  ensure_dir(dir)
+  let script_path = dir + "/entry.js"
+  write_text_file(
+    script_path, "console.log('out'); console.error('err'); process.exitCode = 7;",
+  )
+  let result = match @v8.runtime_new() {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      let executed = run_built_js_on_runtime(runtime, script_path, [])
+      guard executed is Ok(_) else { Err(executed.unwrap_err()) }
+      let executed = executed.unwrap()
+      Ok(
+        executed.exit_code.to_string() +
+        ":" +
+        executed.stdout_lines.join(",") +
+        ":" +
+        executed.stderr_lines.join(","),
+      )
+    }
+    Err(err) => Err(err.to_string())
+  }
+  inspect(result, content="Ok(\"7:out:err\")")
+}
+
+///|
+async test "built js runtime runner surfaces guest throw on stderr" {
+  let dir = "/tmp/mizchi_v8_oden_run_throw_probe"
+  ensure_dir(dir)
+  let script_path = dir + "/entry.js"
+  write_text_file(script_path, "throw new Error('boom');")
+  let result = match @v8.runtime_new() {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      let executed = run_built_js_on_runtime(runtime, script_path, [])
+      guard executed is Ok(_) else { Err(executed.unwrap_err()) }
+      let executed = executed.unwrap()
+      Ok(
+        executed.exit_code.to_string() +
+        ":" +
+        executed.stdout_lines.length().to_string() +
+        ":" +
+        executed.stderr_lines.length().to_string() +
+        ":" +
+        executed.stderr_lines[0].contains("boom").to_string(),
+      )
+    }
+    Err(err) => Err(err.to_string())
+  }
+  inspect(result, content="Ok(\"1:0:1:true\")")
 }
 
 ///|
