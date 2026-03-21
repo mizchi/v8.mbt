@@ -131,7 +131,7 @@ match @v8.runtime_new() {
 - 値 bridge: `set/get/call_global_json`, `set/get/call_global_bytes`, `eval_json`, `eval_bytes`
 - host bridge: `register_*_callback`, `register_*_result_callback`, `register_*_result_callback_with_json_error`, `register_*_op`, `take_*_op`, `resolve_*_op`, `reject_*_op`, `reject_async_*_op_with_json`
 - direct async callback: `register_async_json_callback`, `register_async_bytes_callback`, `register_async_*_result_callback`
-- async event loop bridge: `register_async_*_task_*`, `PromiseHandle::await_*_async`, `ModuleEvalHandle::await_ready_async`
+- async event loop bridge: `with_runtime_async`, `register_async_*_task_*`, `eval_promise_*_async`, `PromiseHandle::await_*_async`, `ModuleEvalHandle::await_ready_async`
 - deno compat: `Runtime::install_deno_core_compat`, `RuntimeBuilder::with_deno_core_compat`, `SnapshotBuilder::with_deno_core_compat`
 - minimal node shim: `Runtime::install_node_compat`, `RuntimeBuilder::with_node_compat`, `SnapshotBuilder::with_node_compat`
 - 失敗 reason は String に加えて JSON value でも返せます

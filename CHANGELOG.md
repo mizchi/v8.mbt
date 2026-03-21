@@ -19,6 +19,7 @@ All notable changes to this project should be documented in this file.
 - Opt-in Node-style shim helpers via `install_node_compat` and `with_node_compat`
 - Shared compat helpers split out from Deno / Node shims, with Deno utility helpers expanded around `Deno.core` and minimal top-level `Deno` metadata
 - MoonBit async event-loop bridge for Deno-style pending ops via `register_async_*_task_*`, `PromiseHandle::await_*_async`, and `ModuleEvalHandle::await_ready_async`
+- Async convenience helpers via `with_runtime_async`, `with_runtime_with_snapshot_async`, and `eval_promise_*_async`
 
 ### Changed
 

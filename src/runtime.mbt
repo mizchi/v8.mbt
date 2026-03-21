@@ -431,6 +431,33 @@ pub fn[T] with_runtime_with_snapshot(
 }
 
 ///|
+pub async fn[T] with_runtime_async(
+  f : async (Runtime) -> Result[T, V8Error],
+) -> Result[T, V8Error] {
+  match runtime_new() {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      f(runtime)
+    }
+    Err(err) => Err(err)
+  }
+}
+
+///|
+pub async fn[T] with_runtime_with_snapshot_async(
+  snapshot : Bytes,
+  f : async (Runtime) -> Result[T, V8Error],
+) -> Result[T, V8Error] {
+  match runtime_new_with_snapshot(snapshot) {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      f(runtime)
+    }
+    Err(err) => Err(err)
+  }
+}
+
+///|
 pub fn eval_string(source : String) -> Result[String, V8Error] {
   with_runtime(fn(runtime) { runtime.eval_string(source) })
 }

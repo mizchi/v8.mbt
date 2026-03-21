@@ -144,6 +144,69 @@ pub fn Runtime::eval_promise_string_with_name(
 }
 
 ///|
+pub async fn Runtime::eval_promise_string_async(
+  self : Runtime,
+  source : String,
+) -> Result[String, V8Error] {
+  let promise = self.eval_promise_string(source)
+  guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+  promise.unwrap().await_string_async()
+}
+
+///|
+pub async fn Runtime::eval_promise_string_async_with_name(
+  self : Runtime,
+  resource_name : String,
+  source : String,
+) -> Result[String, V8Error] {
+  let promise = self.eval_promise_string_with_name(resource_name, source)
+  guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+  promise.unwrap().await_string_async()
+}
+
+///|
+pub async fn Runtime::eval_promise_json_async(
+  self : Runtime,
+  source : String,
+) -> Result[String, V8Error] {
+  let promise = self.eval_promise_string(source)
+  guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+  promise.unwrap().await_json_async()
+}
+
+///|
+pub async fn Runtime::eval_promise_json_async_with_name(
+  self : Runtime,
+  resource_name : String,
+  source : String,
+) -> Result[String, V8Error] {
+  let promise = self.eval_promise_string_with_name(resource_name, source)
+  guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+  promise.unwrap().await_json_async()
+}
+
+///|
+pub async fn Runtime::eval_promise_bytes_async(
+  self : Runtime,
+  source : String,
+) -> Result[Bytes, V8Error] {
+  let promise = self.eval_promise_string(source)
+  guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+  promise.unwrap().await_bytes_async()
+}
+
+///|
+pub async fn Runtime::eval_promise_bytes_async_with_name(
+  self : Runtime,
+  resource_name : String,
+  source : String,
+) -> Result[Bytes, V8Error] {
+  let promise = self.eval_promise_string_with_name(resource_name, source)
+  guard promise is Ok(_) else { return Err(promise.unwrap_err()) }
+  promise.unwrap().await_bytes_async()
+}
+
+///|
 pub fn PromiseHandle::is_closed(self : PromiseHandle) -> Bool {
   self.state.val.handle == 0 || self.state.val.runtime.val.handle == 0
 }
@@ -326,4 +389,55 @@ pub async fn PromiseHandle::await_bytes_async(
   let waited = wait_for_promise_handle_async(self)
   guard waited is Ok(_) else { return Err(waited.unwrap_err()) }
   self.result_bytes()
+}
+
+///|
+pub async fn eval_promise_string_async(
+  source : String,
+) -> Result[String, V8Error] {
+  with_runtime_async(runtime => runtime.eval_promise_string_async(source))
+}
+
+///|
+pub async fn eval_promise_string_async_with_name(
+  resource_name : String,
+  source : String,
+) -> Result[String, V8Error] {
+  with_runtime_async(runtime => {
+    runtime.eval_promise_string_async_with_name(resource_name, source)
+  })
+}
+
+///|
+pub async fn eval_promise_json_async(
+  source : String,
+) -> Result[String, V8Error] {
+  with_runtime_async(runtime => runtime.eval_promise_json_async(source))
+}
+
+///|
+pub async fn eval_promise_json_async_with_name(
+  resource_name : String,
+  source : String,
+) -> Result[String, V8Error] {
+  with_runtime_async(runtime => {
+    runtime.eval_promise_json_async_with_name(resource_name, source)
+  })
+}
+
+///|
+pub async fn eval_promise_bytes_async(
+  source : String,
+) -> Result[Bytes, V8Error] {
+  with_runtime_async(runtime => runtime.eval_promise_bytes_async(source))
+}
+
+///|
+pub async fn eval_promise_bytes_async_with_name(
+  resource_name : String,
+  source : String,
+) -> Result[Bytes, V8Error] {
+  with_runtime_async(runtime => {
+    runtime.eval_promise_bytes_async_with_name(resource_name, source)
+  })
 }

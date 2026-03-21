@@ -1641,6 +1641,49 @@ async test "promise handle can await bytes through moonbit async event loop with
 }
 
 ///|
+async test "with_runtime_async can evaluate deno style promise json" {
+  let result = with_runtime_async(runtime => {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+    let registered = runtime.register_async_json_task_result_callback("add", payload => {
+      @async.sleep(10)
+      if payload == "{\"base\":40}" {
+        Ok("{\"answer\":42}")
+      } else {
+        Err("blocked")
+      }
+    })
+    guard registered is Ok(_) else { Err(registered.unwrap_err()) }
+    runtime.eval_promise_json_async(
+      "(async () => { const payload = await Deno.core.opAsync(Deno.core.ops.add, { base: 40 }); return { answer: payload.answer }; })()",
+    )
+  })
+  inspect(result, content="Ok(\"{\\\"answer\\\":42}\")")
+}
+
+///|
+async test "runtime can eval named promise string async with relative dynamic import" {
+  let result = with_runtime_async(runtime => {
+    let loaded = runtime.load_module(
+      "file:///feature/dep.mjs", "export const answer = 42;",
+    )
+    guard loaded is Ok(_) else { Err(loaded.unwrap_err()) }
+    runtime.eval_promise_string_async_with_name(
+      "file:///feature/bootstrap.js", "(async () => { let mod = await import('./dep.mjs'); return String(mod.answer); })()",
+    )
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+async test "top level eval_promise_json_async can await plain promise" {
+  let result = eval_promise_json_async(
+    "(async () => ({ answer: 42, ok: true }))()",
+  )
+  inspect(result, content="Ok(\"{\\\"answer\\\":42,\\\"ok\\\":true}\")")
+}
+
+///|
 test "module evaluation runs top-level code" {
   let result = with_runtime(fn(runtime) {
     let evaluated = runtime.eval_module_string(
