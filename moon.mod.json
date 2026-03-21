@@ -18,6 +18,7 @@
   "exclude": [
     "_build",
     "target",
+    "oden",
     "deps/rusty_v8",
     "src/build-stamps",
     "trace.json",

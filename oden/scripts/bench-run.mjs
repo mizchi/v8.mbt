@@ -14,8 +14,9 @@ const binaryPath = path.join(
   "native",
   "release",
   "build",
-  "main",
-  "main.exe",
+  "cmd",
+  "oden",
+  "oden.exe",
 )
 const snapshotPath = path.join(
   fixtureDir,
@@ -47,7 +48,7 @@ function benchmarkResult(jsonPath) {
 
 fs.mkdirSync(resultsDir, { recursive: true })
 
-runOrThrow("moon", ["build", "src/main", "--target", "native", "--release"])
+runOrThrow("moon", ["build", "src/cmd/oden", "--target", "native", "--release"])
 
 if (!fs.existsSync(binaryPath)) {
   throw new Error(`oden binary not found: ${binaryPath}`)

@@ -1,7 +1,7 @@
 ///|
-fn test_run_plan(args : Array[String]) -> @oden.OdenCliPlan {
-  match @oden.route_cli(args) {
-    Ok(@oden.OdenCliRoute::Exec(plan)) => plan
+fn test_run_plan(args : Array[String]) -> @oden_lib.OdenCliPlan {
+  match @oden_lib.route_cli(args) {
+    Ok(@oden_lib.OdenCliRoute::Exec(plan)) => plan
     _ => panic()
   }
 }
@@ -25,7 +25,7 @@ fn cache_snapshot_path(target_dir : String) -> String {
 
 ///|
 fn new_run_runtime() -> Result[@v8.Runtime, String] {
-  let runtime = @oden.run_builder_new().build()
+  let runtime = @oden_lib.run_builder_new().build()
   guard runtime is Ok(_) else { return Err(runtime.unwrap_err().to_string()) }
   Ok(runtime.unwrap())
 }

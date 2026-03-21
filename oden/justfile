@@ -12,7 +12,7 @@ test:
     moon test --target {{target}}
 
 run:
-    moon run src/main --target {{target}}
+    moon run src/cmd/oden --target {{target}}
 
 info:
     moon info --target {{target}}

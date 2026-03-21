@@ -38,21 +38,21 @@ CLI router は次を提供します。
 
 ```bash
 cd oden
-moon run src/main --target native -- help
-moon run src/main --target native -- --version
-moon run src/main --target native -- manifest
-moon run src/main --target native -- check --target native
-moon run src/main --target native -- info --target native
-moon run src/main --target native -- task
-moon run src/main --target native -- plan bundle app/main
+moon run src/cmd/oden --target native -- help
+moon run src/cmd/oden --target native -- --version
+moon run src/cmd/oden --target native -- manifest
+moon run src/cmd/oden --target native -- check --target native
+moon run src/cmd/oden --target native -- info --target native
+moon run src/cmd/oden --target native -- task
+moon run src/cmd/oden --target native -- plan bundle app/main
 ```
 
 `run(js)` は subprocess ではなく、上の run image から V8 isolate を起こして guest code を評価します。なので guest の `stdout` / `stderr` / `process.exitCode` を `oden` 側に反映できます。さらに serialized run snapshot は guest project の `.oden/run/oden-run.snapshot.bin` にキャッシュされ、同じ project での warm run では再利用されます。repo 内で self-host smoke をするときは `moon run` より build 済み binary を project dir から直接叩く方が実利用に近いです。
 
 ```bash
-moon -C oden build src/main --target native
+moon -C oden build src/cmd/oden --target native
 cd /path/to/moonbit-project
-/abs/path/to/v8.mbt/oden/_build/native/debug/build/main/main.exe run
+/abs/path/to/v8.mbt/oden/_build/native/debug/build/cmd/oden/oden.exe run
 ```
 
 `oden` 自体は `mizchi/v8` の上に載る native module なので、この repo の中で `check/test/bundle/info/task/plan` を試すときは明示的に `--target native` override を渡っています。将来的に別 repo へ切り出した後は、JS/WASM first な project を対象に同じ router をそのまま使う想定です。

@@ -1,12 +1,8 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/oden/main"
-
-import {
-  "mizchi/oden",
-}
+package "mizchi/oden/cmd/oden"
 
 // Values
-pub async fn execute_run_plan(@oden.OdenCliPlan) -> Result[Int, String]
+pub async fn execute_run_plan(@mizchi/oden.OdenCliPlan) -> Result[Int, String]
 
 // Errors
 

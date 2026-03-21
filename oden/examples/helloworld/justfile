@@ -1,0 +1,8 @@
+fmt:
+    oden fmt
+
+check:
+    oden check
+
+run:
+    oden run

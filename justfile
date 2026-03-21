@@ -38,7 +38,7 @@ oden-test:
     moon -C oden test --target {{target}}
 
 oden-run:
-    moon -C oden run src/main --target {{target}}
+    moon -C oden run src/cmd/oden --target {{target}}
 
 oden-info:
     moon -C oden info --target {{target}}

@@ -57,7 +57,7 @@ fn split_run_args(args : Array[String]) -> (Array[String], Array[String]) {
 
 ///|
 fn parse_run_invocation(
-  plan : @oden.OdenCliPlan,
+  plan : @oden_lib.OdenCliPlan,
   cwd : String,
 ) -> Result[OdenRunInvocation, String] {
   if plan.kind != "run" {
@@ -244,7 +244,7 @@ fn prepare_guest_run_state(
   runtime : @v8.Runtime,
   guest_args : Array[String],
 ) -> Result[Unit, String] {
-  let prepared = @oden.prepare_run_runtime(runtime, guest_args)
+  let prepared = @oden_lib.prepare_run_runtime(runtime, guest_args)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err().to_string()) }
   Ok(())
 }
@@ -389,7 +389,7 @@ async fn read_cached_run_snapshot(
 async fn build_and_cache_run_snapshot(
   target_dir : String,
 ) -> Result[Bytes, String] {
-  let snapshot = @oden.run_snapshot_builder_new().build()
+  let snapshot = @oden_lib.run_snapshot_builder_new().build()
   guard snapshot is Ok(_) else { return Err(snapshot.unwrap_err().to_string()) }
   let snapshot = snapshot.unwrap()
   ensure_dir_exists(target_dir)
@@ -431,7 +431,9 @@ async fn load_run_runtime(target_dir : String) -> Result[@v8.Runtime, String] {
 }
 
 ///|
-pub async fn execute_run_plan(plan : @oden.OdenCliPlan) -> Result[Int, String] {
+pub async fn execute_run_plan(
+  plan : @oden_lib.OdenCliPlan,
+) -> Result[Int, String] {
   if plan.kind == "run" && plan.target == "js" {
     execute_js_run_plan(plan)
   } else {
@@ -442,13 +444,15 @@ pub async fn execute_run_plan(plan : @oden.OdenCliPlan) -> Result[Int, String] {
 }
 
 ///|
-async fn execute_js_run_plan(plan : @oden.OdenCliPlan) -> Result[Int, String] {
+async fn execute_js_run_plan(
+  plan : @oden_lib.OdenCliPlan,
+) -> Result[Int, String] {
   execute_js_run_plan_in_cwd(plan, plan.cwd)
 }
 
 ///|
 async fn execute_js_run_plan_in_cwd(
-  plan : @oden.OdenCliPlan,
+  plan : @oden_lib.OdenCliPlan,
   cwd : String,
 ) -> Result[Int, String] {
   let invocation = parse_run_invocation(plan, cwd)
