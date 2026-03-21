@@ -41,7 +41,7 @@ fn oden_cli_compat_source() -> String {
   "if (typeof oden.exitCode !== 'number') oden.exitCode = 0; " +
   "if (typeof oden.cli !== 'object' || oden.cli === null) oden.cli = {}; " +
   "const cli = oden.cli; " +
-  "const cliCommands = typeof cli.commands === 'object' && cli.commands !== null ? cli.commands : (cli.commands = { run: { name: 'run', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'build MoonBit JS and execute the entry module' }, check: { name: 'check', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'type-check MoonBit sources for JS/WASM-first targets' }, test: { name: 'test', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'run MoonBit tests with JS/WASM-first outputs' }, bundle: { name: 'bundle', primaryLanguage: 'moonbit', defaultTarget: 'wasm', firstClassTargets: ['js', 'wasm'], description: 'bundle MoonBit JS/WASM artifacts for distribution' }, fmt: { name: 'fmt', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'format MoonBit sources' }, info: { name: 'info', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'emit MoonBit public API information for JS/WASM-first targets' } }); " +
+  "const cliCommands = typeof cli.commands === 'object' && cli.commands !== null ? cli.commands : (cli.commands = { run: { name: 'run', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'build MoonBit JS and execute the entry module' }, check: { name: 'check', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'type-check MoonBit sources for JS/WASM-first targets' }, test: { name: 'test', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'run MoonBit tests with JS/WASM-first outputs' }, bundle: { name: 'bundle', primaryLanguage: 'moonbit', defaultTarget: 'wasm', firstClassTargets: ['js', 'wasm'], description: 'bundle MoonBit JS/WASM artifacts for distribution' }, fmt: { name: 'fmt', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'format MoonBit sources' }, info: { name: 'info', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'emit MoonBit public API information for JS/WASM-first targets' }, task: { name: 'task', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'run project automation tasks through just' } }); " +
   "if (typeof cli.command !== 'function') cli.command = function(name){ const key = String(name ?? ''); return Object.prototype.hasOwnProperty.call(cliCommands, key) ? cliCommands[key] : null; }; " +
   "if (typeof cli.commandNames !== 'function') cli.commandNames = function(){ return Object.keys(cliCommands); }; " +
   "if (!Object.prototype.hasOwnProperty.call(oden, 'core')) Object.defineProperty(oden, 'core', { configurable: true, enumerable: true, get: function(){ return requireDeno().core; } }); " +
@@ -55,7 +55,7 @@ fn oden_cli_compat_source() -> String {
 ///|
 pub struct OdenCliPlan {
   name : String
-  moon_subcommand : String
+  program : String
   argv : Array[String]
   target : String
 }
@@ -80,6 +80,7 @@ pub fn help_text() -> String {
     #|  bundle [path] [moon args...]   build MoonBit code with wasm-gc-first defaults
     #|  fmt [moon args...]             format MoonBit sources
     #|  info [moon args...]            emit MoonBit public API info with JS-first defaults
+    #|  task [name] [task args...]     run project tasks through just
     #|  version                        print Oden/V8/MoonBit version info
     #|  manifest                       print the Oden CLI manifest JSON
     #|  help                           show this help message
@@ -151,7 +152,7 @@ fn build_plan_args(
 }
 
 ///|
-fn route_exec_command(
+fn route_exec_moon_command(
   name : String,
   moon_subcommand : String,
   default_target : String?,
@@ -165,7 +166,7 @@ fn route_exec_command(
   }
   OdenCliRoute::Exec(OdenCliPlan::{
     name,
-    moon_subcommand,
+    program: "moon",
     argv: build_plan_args(
       moon_subcommand, path, default_path, default_target, extra_args,
     ),
@@ -177,6 +178,20 @@ fn route_exec_command(
           None => "none"
         }
     },
+  })
+}
+
+///|
+fn route_task_command(args : Array[String]) -> OdenCliRoute {
+  let argv = match args {
+    [] => ["--summary"]
+    _ => args
+  }
+  OdenCliRoute::Exec(OdenCliPlan::{
+    name: "task",
+    program: "just",
+    argv,
+    target: "none",
   })
 }
 
@@ -193,7 +208,7 @@ pub fn route_cli(args : Array[String]) -> Result[OdenCliRoute, String] {
     ["manifest", ..] => Ok(OdenCliRoute::Manifest)
     ["run", .. rest] =>
       Ok(
-        route_exec_command(
+        route_exec_moon_command(
           "run",
           "run",
           Some("js"),
@@ -203,13 +218,27 @@ pub fn route_cli(args : Array[String]) -> Result[OdenCliRoute, String] {
       )
     ["check", .. rest] =>
       Ok(
-        route_exec_command("check", "check", Some("js"), None, rest.to_array()),
+        route_exec_moon_command(
+          "check",
+          "check",
+          Some("js"),
+          None,
+          rest.to_array(),
+        ),
       )
     ["test", .. rest] =>
-      Ok(route_exec_command("test", "test", Some("js"), None, rest.to_array()))
+      Ok(
+        route_exec_moon_command(
+          "test",
+          "test",
+          Some("js"),
+          None,
+          rest.to_array(),
+        ),
+      )
     ["bundle", .. rest] =>
       Ok(
-        route_exec_command(
+        route_exec_moon_command(
           "bundle",
           "build",
           Some("wasm-gc"),
@@ -218,9 +247,18 @@ pub fn route_cli(args : Array[String]) -> Result[OdenCliRoute, String] {
         ),
       )
     ["fmt", .. rest] =>
-      Ok(route_exec_command("fmt", "fmt", None, None, rest.to_array()))
+      Ok(route_exec_moon_command("fmt", "fmt", None, None, rest.to_array()))
     ["info", .. rest] =>
-      Ok(route_exec_command("info", "info", Some("js"), None, rest.to_array()))
+      Ok(
+        route_exec_moon_command(
+          "info",
+          "info",
+          Some("js"),
+          None,
+          rest.to_array(),
+        ),
+      )
+    ["task", .. rest] => Ok(route_task_command(rest.to_array()))
     [command, ..] => Err("unknown oden subcommand: \{command}")
   }
 }

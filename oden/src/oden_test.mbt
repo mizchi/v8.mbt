@@ -11,6 +11,8 @@ test "oden module can expose cli manifest" {
         ":" +
         value.contains("\"info\"").to_string() +
         ":" +
+        value.contains("\"task\"").to_string() +
+        ":" +
         value.contains("\"language\":\"moonbit\"").to_string() +
         ":" +
         value.contains("\"firstClassTargets\":[\"js\",\"wasm\"]").to_string() +
@@ -19,7 +21,7 @@ test "oden module can expose cli manifest" {
       )
     Err(err) => Err(err)
   }
-  inspect(result, content="Ok(\"true:true:true:true:true:true:true\")")
+  inspect(result, content="Ok(\"true:true:true:true:true:true:true:true\")")
 }
 
 ///|
@@ -27,6 +29,8 @@ test "oden routes run command to moon js target" {
   let result = match route_cli(["run"]) {
     Ok(OdenCliRoute::Exec(plan)) =>
       plan.name +
+      ":" +
+      plan.program +
       ":" +
       plan.target +
       ":" +
@@ -40,7 +44,7 @@ test "oden routes run command to moon js target" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="run:js:run:src/main:--target:js")
+  inspect(result, content="run:moon:js:run:src/main:--target:js")
 }
 
 ///|
@@ -49,7 +53,7 @@ test "oden routes bundle command to moon wasm build" {
     Ok(OdenCliRoute::Exec(plan)) =>
       plan.name +
       ":" +
-      plan.moon_subcommand +
+      plan.program +
       ":" +
       plan.target +
       ":" +
@@ -67,7 +71,7 @@ test "oden routes bundle command to moon wasm build" {
   }
   inspect(
     result,
-    content="bundle:build:wasm-gc:build:app/main:--target:wasm-gc:--release",
+    content="bundle:moon:wasm-gc:build:app/main:--target:wasm-gc:--release",
   )
 }
 
@@ -88,7 +92,7 @@ test "oden routes fmt command without target injection" {
     Ok(OdenCliRoute::Exec(plan)) =>
       plan.name +
       ":" +
-      plan.moon_subcommand +
+      plan.program +
       ":" +
       plan.target +
       ":" +
@@ -98,7 +102,7 @@ test "oden routes fmt command without target injection" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="fmt:fmt:none:fmt:--check")
+  inspect(result, content="fmt:moon:none:fmt:--check")
 }
 
 ///|
@@ -106,6 +110,8 @@ test "oden routes info command to moon info js target" {
   let result = match route_cli(["info"]) {
     Ok(OdenCliRoute::Exec(plan)) =>
       plan.name +
+      ":" +
+      plan.program +
       ":" +
       plan.target +
       ":" +
@@ -117,7 +123,39 @@ test "oden routes info command to moon info js target" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="info:js:info:--target:js")
+  inspect(result, content="info:moon:js:info:--target:js")
+}
+
+///|
+test "oden routes task summary to just" {
+  let result = match route_cli(["task"]) {
+    Ok(OdenCliRoute::Exec(plan)) =>
+      plan.name + ":" + plan.program + ":" + plan.target + ":" + plan.argv[0]
+    Ok(_) => "unexpected"
+    Err(err) => err
+  }
+  inspect(result, content="task:just:none:--summary")
+}
+
+///|
+test "oden routes task arguments to just without rewriting" {
+  let result = match route_cli(["task", "check", "--target", "native"]) {
+    Ok(OdenCliRoute::Exec(plan)) =>
+      plan.name +
+      ":" +
+      plan.program +
+      ":" +
+      plan.target +
+      ":" +
+      plan.argv[0] +
+      ":" +
+      plan.argv[1] +
+      ":" +
+      plan.argv[2]
+    Ok(_) => "unexpected"
+    Err(err) => err
+  }
+  inspect(result, content="task:just:none:check:--target:native")
 }
 
 ///|
@@ -159,12 +197,12 @@ test "oden can expose version text" {
 test "oden builder preloads compat" {
   let result = builder_new().with_runtime(fn(runtime) {
     runtime.eval_json(
-      "({ sameCore: Oden.core === Deno.core, bundleTarget: Oden.cli.command('bundle').defaultTarget, hasFmt: Oden.cli.command('fmt') !== null, execPath: Oden.execPath() })",
+      "({ sameCore: Oden.core === Deno.core, bundleTarget: Oden.cli.command('bundle').defaultTarget, hasFmt: Oden.cli.command('fmt') !== null, hasTask: Oden.cli.command('task') !== null, execPath: Oden.execPath() })",
     )
   })
   inspect(
     result,
-    content="Ok(\"{\\\"sameCore\\\":true,\\\"bundleTarget\\\":\\\"wasm\\\",\\\"hasFmt\\\":true,\\\"execPath\\\":\\\"/mizchi-oden/bin/oden\\\"}\")",
+    content="Ok(\"{\\\"sameCore\\\":true,\\\"bundleTarget\\\":\\\"wasm\\\",\\\"hasFmt\\\":true,\\\"hasTask\\\":true,\\\"execPath\\\":\\\"/mizchi-oden/bin/oden\\\"}\")",
   )
 }
 

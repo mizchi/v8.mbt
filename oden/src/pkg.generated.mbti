@@ -27,7 +27,7 @@ pub fn[T] with_runtime((@v8.Runtime) -> Result[T, @v8.V8Error]) -> Result[T, @v8
 // Types and methods
 pub struct OdenCliPlan {
   name : String
-  moon_subcommand : String
+  program : String
   argv : Array[String]
   target : String
 }

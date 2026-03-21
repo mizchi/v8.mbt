@@ -16,7 +16,7 @@ async fn main {
       }
     Ok(@oden.OdenCliRoute::Exec(plan)) => {
       ignore(@v8.version())
-      let exit_code = @process.run("moon", plan.argv) catch {
+      let exit_code = @process.run(plan.program, plan.argv) catch {
         err => {
           println(err.to_string())
           exit(1)
