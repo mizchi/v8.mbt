@@ -17,11 +17,22 @@ async fn main {
       }
     Ok(@oden.OdenCliRoute::Exec(plan)) => {
       ignore(@v8.version())
-      let exit_code = @process.run(plan.program, plan.argv) catch {
-        err => {
-          println(err.to_string())
-          exit(1)
-          1
+      let exit_code = if plan.kind == "run" && plan.target == "js" {
+        match execute_js_run_plan(plan) {
+          Ok(code) => code
+          Err(err) => {
+            println(err.to_string())
+            exit(1)
+            1
+          }
+        }
+      } else {
+        @process.run(plan.program, plan.argv, cwd=plan.cwd) catch {
+          err => {
+            println(err.to_string())
+            exit(1)
+            1
+          }
         }
       }
       if exit_code != 0 {

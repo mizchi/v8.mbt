@@ -1804,6 +1804,22 @@ async test "with_runtime_async can clear timeout in deno compat" {
 }
 
 ///|
+async test "runtime can run event loop until idle after sync script schedules timeout" {
+  let result = with_runtime_async(runtime => {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+    let prepared = runtime.eval_string(
+      "globalThis.__ticks = []; setTimeout((label) => { globalThis.__ticks.push(label); }, 0, 'tick')",
+    )
+    guard prepared is Ok(_) else { Err(prepared.unwrap_err()) }
+    let drained = runtime.run_event_loop_until_idle_async()
+    guard drained is Ok(_) else { Err(drained.unwrap_err()) }
+    runtime.eval_json("({ ticks: globalThis.__ticks })")
+  })
+  inspect(result, content="Ok(\"{\\\"ticks\\\":[\\\"tick\\\"]}\")")
+}
+
+///|
 async test "with_runtime_async deno sleep resource tracks ref and settles" {
   let result = match runtime_new() {
     Ok(runtime) => {

@@ -1,0 +1,344 @@
+///|
+struct OdenRunInvocation {
+  package_path : String
+  moon_args : Array[String]
+  guest_args : Array[String]
+  target_dir : String
+  cwd : String
+  is_release : Bool
+}
+
+///|
+fn default_run_target_dir() -> String {
+  ".oden/run"
+}
+
+///|
+fn starts_with_dash(arg : String) -> Bool {
+  arg.has_prefix("-")
+}
+
+///|
+fn find_arg_flag_value(args : Array[String], flag : String) -> String? {
+  for i in 0..<args.length() {
+    if args[i] == flag && i + 1 < args.length() {
+      return Some(args[i + 1])
+    }
+  }
+  None
+}
+
+///|
+fn split_run_args(args : Array[String]) -> (Array[String], Array[String]) {
+  let moon_args : Array[String] = []
+  let guest_args : Array[String] = []
+  let mut after_delimiter = false
+  for i in 0..<args.length() {
+    let arg = args[i]
+    if !after_delimiter && arg == "--" {
+      after_delimiter = true
+      continue
+    }
+    if after_delimiter {
+      guest_args.push(arg)
+    } else {
+      moon_args.push(arg)
+    }
+  }
+  (moon_args, guest_args)
+}
+
+///|
+fn parse_run_invocation(
+  plan : @oden.OdenCliPlan,
+  cwd : String,
+) -> Result[OdenRunInvocation, String] {
+  if plan.kind != "run" {
+    return Err("expected run plan")
+  }
+  if plan.argv.is_empty() || plan.argv[0] != "run" {
+    return Err("expected moon run argv")
+  }
+  let package_path = if plan.argv.length() > 1 &&
+    plan.argv[1] != "--" &&
+    !starts_with_dash(plan.argv[1]) {
+    plan.argv[1]
+  } else {
+    "src/main"
+  }
+  let trailing = if plan.argv.length() > 2 {
+    plan.argv[2:].to_array()
+  } else {
+    []
+  }
+  let (moon_args, guest_args) = split_run_args(trailing)
+  let target_dir = find_arg_flag_value(moon_args, "--target-dir").unwrap_or(
+    default_run_target_dir(),
+  )
+  Ok(OdenRunInvocation::{
+    package_path,
+    moon_args,
+    guest_args,
+    target_dir,
+    cwd,
+    is_release: moon_args.contains("--release"),
+  })
+}
+
+///|
+fn join_path(left : String, right : String) -> String {
+  if left.is_empty() || left == "." {
+    right
+  } else if right.is_empty() {
+    left
+  } else if right.has_prefix("/") {
+    right
+  } else if left.has_suffix("/") {
+    left + right
+  } else {
+    left + "/" + right
+  }
+}
+
+///|
+fn resolve_path(cwd : String, path : String) -> String {
+  if path.has_prefix("/") {
+    path
+  } else {
+    join_path(cwd, path)
+  }
+}
+
+///|
+fn last_path_segment(path : String) -> String {
+  match path.rev_find("/") {
+    Some(index) => path[index + 1:].to_string()
+    None => path
+  }
+}
+
+///|
+fn normalize_package_path(source_dir : String, package_path : String) -> String {
+  if package_path == source_dir {
+    ""
+  } else {
+    match package_path.strip_prefix(source_dir + "/") {
+      Some(rest) => rest.to_string()
+      None => package_path
+    }
+  }
+}
+
+///|
+fn module_stem(module_name : String) -> String {
+  last_path_segment(module_name)
+}
+
+///|
+fn resolve_js_artifact_path(
+  module_name : String,
+  source_dir : String,
+  package_path : String,
+  target_dir : String,
+  is_release : Bool,
+) -> String {
+  let profile_dir = if is_release { "release" } else { "debug" }
+  let build_root = join_path(
+    join_path(join_path(target_dir, "js"), profile_dir),
+    "build",
+  )
+  let normalized = normalize_package_path(source_dir, package_path)
+  if normalized.is_empty() {
+    join_path(build_root, module_stem(module_name) + ".js")
+  } else {
+    join_path(
+      join_path(build_root, normalized),
+      last_path_segment(normalized) + ".js",
+    )
+  }
+}
+
+///|
+fn build_run_compile_argv(invocation : OdenRunInvocation) -> Array[String] {
+  let argv : Array[String] = ["build", invocation.package_path]
+  invocation.moon_args.each(arg => argv.push(arg))
+  if find_arg_flag_value(invocation.moon_args, "--target-dir") is None {
+    argv.push("--target-dir")
+    argv.push(invocation.target_dir)
+  }
+  argv
+}
+
+///|
+async fn read_module_config(cwd : String) -> Result[(String, String), String] {
+  let moon_mod_path = resolve_path(cwd, "moon.mod.json")
+  let moon_mod_text = @fs.read_file(moon_mod_path).text() catch {
+    err =>
+      return Err("failed to read " + moon_mod_path + ": " + err.to_string())
+  }
+  let moon_mod = @json.parse(moon_mod_text) catch {
+    err =>
+      return Err("failed to parse " + moon_mod_path + ": " + err.to_string())
+  }
+  guard moon_mod is Object(fields) else {
+    return Err("moon.mod.json must be a JSON object")
+  }
+  let module_name = match fields.get("name") {
+    Some(String(name)) => name
+    _ => return Err("moon.mod.json must contain string name")
+  }
+  let source_dir = match fields.get("source") {
+    Some(String(source_dir)) => source_dir
+    _ => "src"
+  }
+  Ok((module_name, source_dir))
+}
+
+///|
+fn guest_args_json(guest_args : Array[String]) -> String {
+  Json::array(guest_args.map(arg => Json::string(arg))).stringify()
+}
+
+///|
+fn install_console_shim(runtime : @v8.Runtime) -> Result[Unit, String] {
+  let registered = runtime.register_sync_json_callback(
+    "__oden_console_print__",
+    payload => {
+      let parsed = @json.parse(payload) catch { _ => Json::string(payload) }
+      let text = match parsed {
+        String(text) => text
+        _ => parsed.stringify()
+      }
+      println(text)
+      "null"
+    },
+  )
+  guard registered is Ok(_) else {
+    return Err(registered.unwrap_err().to_string())
+  }
+  let installed = runtime.eval_string_with_name(
+    "file:///compat/oden-console.js", "(function(){ const format = function(value){ if (typeof value === 'string') return value; try { const text = JSON.stringify(value); return text === undefined ? String(value) : text; } catch (_) { return String(value); } }; const print = function(args){ const text = Array.prototype.slice.call(args).map(format).join(' '); MoonBit.opSync('__oden_console_print__', text); }; globalThis.console = { log: function(...args){ print(args); }, error: function(...args){ print(args); }, warn: function(...args){ print(args); } }; })()",
+  )
+  guard installed is Ok(_) else {
+    return Err(installed.unwrap_err().to_string())
+  }
+  Ok(())
+}
+
+///|
+fn apply_guest_args(
+  runtime : @v8.Runtime,
+  guest_args : Array[String],
+) -> Result[Unit, String] {
+  let args_json = guest_args_json(guest_args)
+  let set = runtime.eval_string(
+    "globalThis.Deno.args = " +
+    args_json +
+    "; globalThis.Oden.args = " +
+    args_json +
+    ";",
+  )
+  guard set is Ok(_) else { return Err(set.unwrap_err().to_string()) }
+  Ok(())
+}
+
+///|
+fn script_resource_name(path : String) -> String {
+  if path.has_prefix("file://") {
+    path
+  } else if path.has_prefix("/") {
+    "file://" + path
+  } else {
+    "file:///" + path
+  }
+}
+
+///|
+async fn run_built_js_on_runtime(
+  runtime : @v8.Runtime,
+  built_js_path : String,
+  guest_args : Array[String],
+) -> Result[Unit, String] {
+  let installed = @oden.install(runtime)
+  guard installed is Ok(_) else {
+    return Err(installed.unwrap_err().to_string())
+  }
+  let console_installed = install_console_shim(runtime)
+  guard console_installed is Ok(_) else {
+    return Err(console_installed.unwrap_err())
+  }
+  let args_applied = apply_guest_args(runtime, guest_args)
+  guard args_applied is Ok(_) else { return Err(args_applied.unwrap_err()) }
+  let source = @fs.read_file(built_js_path).text() catch {
+    err =>
+      return Err("failed to read " + built_js_path + ": " + err.to_string())
+  }
+  let evaluated = runtime.eval_string_with_name(
+    script_resource_name(built_js_path),
+    source,
+  )
+  guard evaluated is Ok(_) else {
+    return Err(evaluated.unwrap_err().to_string())
+  }
+  let drained = runtime.run_event_loop_until_idle_async()
+  guard drained is Ok(_) else { return Err(drained.unwrap_err().to_string()) }
+  Ok(())
+}
+
+///|
+fn print_non_empty_output(text : String) -> Unit {
+  let trimmed = text.trim().to_string()
+  if !trimmed.is_empty() {
+    println(trimmed)
+  }
+}
+
+///|
+async fn execute_js_run_plan(plan : @oden.OdenCliPlan) -> Result[Int, String] {
+  execute_js_run_plan_in_cwd(plan, plan.cwd)
+}
+
+///|
+async fn execute_js_run_plan_in_cwd(
+  plan : @oden.OdenCliPlan,
+  cwd : String,
+) -> Result[Int, String] {
+  let invocation = parse_run_invocation(plan, cwd)
+  guard invocation is Ok(_) else { return Err(invocation.unwrap_err()) }
+  let invocation = invocation.unwrap()
+  let build_argv = build_run_compile_argv(invocation)
+  let (code, stdout, stderr) = @process.collect_output(
+    "moon",
+    build_argv,
+    cwd=invocation.cwd,
+  )
+  if code != 0 {
+    print_non_empty_output(stdout.text())
+    print_non_empty_output(stderr.text())
+    return Ok(code)
+  }
+  let module_config = read_module_config(invocation.cwd)
+  guard module_config is Ok(_) else { return Err(module_config.unwrap_err()) }
+  let (module_name, source_dir) = module_config.unwrap()
+  let built_js_path = resolve_path(
+    invocation.cwd,
+    resolve_js_artifact_path(
+      module_name,
+      source_dir,
+      invocation.package_path,
+      invocation.target_dir,
+      invocation.is_release,
+    ),
+  )
+  let runtime = @v8.runtime_new()
+  guard runtime is Ok(_) else { return Err(runtime.unwrap_err().to_string()) }
+  let runtime = runtime.unwrap()
+  defer runtime.dispose()
+  let executed = run_built_js_on_runtime(
+    runtime,
+    built_js_path,
+    invocation.guest_args,
+  )
+  guard executed is Ok(_) else { return Err(executed.unwrap_err()) }
+  Ok(0)
+}

@@ -6,6 +6,7 @@ package "mizchi/oden/main"
 // Errors
 
 // Types and methods
+type OdenRunInvocation
 
 // Type aliases
 

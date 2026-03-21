@@ -158,6 +158,18 @@ fn pump_async_tasks_once(
 }
 
 ///|
+fn runtime_has_ref_resources(runtime : Runtime) -> Result[Bool, V8Error] {
+  let listed = runtime.list_resources()
+  guard listed is Ok(_) else { return Err(listed.unwrap_err()) }
+  for i in 0..<listed.unwrap().length() {
+    if listed.unwrap()[i].is_ref {
+      return Ok(true)
+    }
+  }
+  Ok(false)
+}
+
+///|
 async fn wait_for_promise_handle_async(
   handle : PromiseHandle,
 ) -> Result[Unit, V8Error] {
@@ -182,6 +194,38 @@ async fn wait_for_promise_handle_async(
         break
       }
       if progressed.unwrap() {
+        @async.pause()
+      } else {
+        @async.sleep(1)
+      }
+    }
+    Ok(())
+  })
+}
+
+///|
+pub async fn Runtime::run_event_loop_until_idle_async(
+  self : Runtime,
+) -> Result[Unit, V8Error] {
+  let begun = runtime_begin_async_loop(self)
+  guard begun is Ok(_) else { return Err(begun.unwrap_err()) }
+  defer runtime_end_async_loop(self)
+  @async.with_task_group(group => {
+    for ;; {
+      let progressed = pump_async_tasks_once(self, group)
+      guard progressed is Ok(_) else { return Err(progressed.unwrap_err()) }
+      let flushed = self.perform_microtask_checkpoint()
+      guard flushed is Ok(_) else { return Err(flushed.unwrap_err()) }
+      let has_ref_resources = runtime_has_ref_resources(self)
+      guard has_ref_resources is Ok(_) else {
+        return Err(has_ref_resources.unwrap_err())
+      }
+      if !progressed.unwrap() &&
+        self.state.val.async_loop.pending_tasks == 0 &&
+        !has_ref_resources.unwrap() {
+        break
+      }
+      if progressed.unwrap() || self.state.val.async_loop.pending_tasks > 0 {
         @async.pause()
       } else {
         @async.sleep(1)

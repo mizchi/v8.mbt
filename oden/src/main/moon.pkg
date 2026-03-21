@@ -1,6 +1,8 @@
 import {
+  "moonbitlang/core/json" @json,
   "moonbitlang/core/env",
   "moonbitlang/async",
+  "moonbitlang/async/fs" @fs,
   "moonbitlang/async/process",
   "mizchi/oden" @oden,
   "mizchi/v8" @v8,

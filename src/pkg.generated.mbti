@@ -224,6 +224,7 @@ pub fn Runtime::reject_async_json_op(Self, UInt64, String) -> Result[Unit, V8Err
 pub fn Runtime::reject_async_json_op_with_json(Self, UInt64, String) -> Result[Unit, V8Error]
 pub fn Runtime::resolve_async_bytes_op(Self, UInt64, Bytes) -> Result[Unit, V8Error]
 pub fn Runtime::resolve_async_json_op(Self, UInt64, String) -> Result[Unit, V8Error]
+pub async fn Runtime::run_event_loop_until_idle_async(Self) -> Result[Unit, V8Error]
 pub fn Runtime::set_global_bytes(Self, String, Bytes) -> Result[Unit, V8Error]
 pub fn Runtime::set_global_json(Self, String, String) -> Result[Unit, V8Error]
 pub fn Runtime::take_async_bytes_op(Self) -> Result[AsyncBytesOpRequest?, V8Error]
