@@ -33,6 +33,7 @@ pub struct OdenCliPlan {
   program : String
   argv : Array[String]
   cwd : String
+  out_dir : String?
   target : String
 }
 

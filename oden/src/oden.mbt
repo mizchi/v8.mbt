@@ -41,7 +41,7 @@ fn oden_cli_compat_source() -> String {
   "if (typeof oden.exitCode !== 'number') oden.exitCode = 0; " +
   "if (typeof oden.cli !== 'object' || oden.cli === null) oden.cli = {}; " +
   "const cli = oden.cli; " +
-  "const cliCommands = typeof cli.commands === 'object' && cli.commands !== null ? cli.commands : (cli.commands = { run: { name: 'run', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'build MoonBit JS and execute the entry module' }, check: { name: 'check', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'type-check MoonBit sources for JS/WASM-first targets' }, test: { name: 'test', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'run MoonBit tests with JS/WASM-first outputs' }, bundle: { name: 'bundle', primaryLanguage: 'moonbit', defaultTarget: 'wasm', firstClassTargets: ['js', 'wasm'], description: 'bundle MoonBit JS/WASM artifacts for distribution' }, fmt: { name: 'fmt', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'format MoonBit sources' }, info: { name: 'info', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'emit MoonBit public API information for JS/WASM-first targets' }, task: { name: 'task', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'run project automation tasks through just' }, plan: { name: 'plan', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'print the translated execution plan without running it' } }); " +
+  "const cliCommands = typeof cli.commands === 'object' && cli.commands !== null ? cli.commands : (cli.commands = { run: { name: 'run', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'build MoonBit JS and execute the entry module' }, check: { name: 'check', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'type-check MoonBit sources for JS/WASM-first targets' }, test: { name: 'test', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'run MoonBit tests with JS/WASM-first outputs' }, bundle: { name: 'bundle', primaryLanguage: 'moonbit', defaultTarget: 'wasm', defaultOutDir: '.oden/build/wasm-gc', firstClassTargets: ['js', 'wasm'], description: 'bundle MoonBit JS/WASM artifacts for distribution' }, fmt: { name: 'fmt', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'format MoonBit sources' }, info: { name: 'info', primaryLanguage: 'moonbit', defaultTarget: 'js', firstClassTargets: ['js', 'wasm'], description: 'emit MoonBit public API information for JS/WASM-first targets' }, task: { name: 'task', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'run project automation tasks through just' }, plan: { name: 'plan', primaryLanguage: 'moonbit', defaultTarget: null, firstClassTargets: ['js', 'wasm'], description: 'print the translated execution plan without running it' } }); " +
   "if (typeof cli.command !== 'function') cli.command = function(name){ const key = String(name ?? ''); return Object.prototype.hasOwnProperty.call(cliCommands, key) ? cliCommands[key] : null; }; " +
   "if (typeof cli.commandNames !== 'function') cli.commandNames = function(){ return Object.keys(cliCommands); }; " +
   "if (!Object.prototype.hasOwnProperty.call(oden, 'core')) Object.defineProperty(oden, 'core', { configurable: true, enumerable: true, get: function(){ return requireDeno().core; } }); " +
@@ -59,6 +59,7 @@ pub struct OdenCliPlan {
   program : String
   argv : Array[String]
   cwd : String
+  out_dir : String?
   target : String
 }
 
@@ -117,6 +118,13 @@ pub fn plan_json(plan : OdenCliPlan) -> String {
   plan.argv.each(arg => argv.push(Json::string(arg)))
   values.set("argv", Json::array(argv))
   values.set("cwd", Json::string(plan.cwd))
+  values.set(
+    "outDir",
+    match plan.out_dir {
+      Some(out_dir) => Json::string(out_dir)
+      None => Json::null()
+    },
+  )
   values.set("target", Json::string(plan.target))
   Json::object(values).stringify()
 }
@@ -127,9 +135,9 @@ fn starts_with_option(arg : String) -> Bool {
 }
 
 ///|
-fn find_target_value(args : Array[String]) -> String? {
+fn find_flag_value(args : Array[String], flag : String) -> String? {
   for i in 0..<args.length() {
-    if args[i] == "--target" && i + 1 < args.length() {
+    if args[i] == flag && i + 1 < args.length() {
       return Some(args[i + 1])
     }
   }
@@ -154,7 +162,7 @@ fn build_plan_args(
         None => ()
       }
   }
-  if find_target_value(extra_args) is None {
+  if find_flag_value(extra_args, "--target") is None {
     match default_target {
       Some(default_target) => {
         argv.push("--target")
@@ -190,7 +198,8 @@ fn route_exec_moon_command(
       moon_subcommand, path, default_path, default_target, extra_args,
     ),
     cwd: ".",
-    target: match find_target_value(extra_args) {
+    out_dir: None,
+    target: match find_flag_value(extra_args, "--target") {
       Some(target) => target
       None =>
         match default_target {
@@ -198,6 +207,44 @@ fn route_exec_moon_command(
           None => "none"
         }
     },
+  })
+}
+
+///|
+fn bundle_target_dir(target : String) -> String {
+  ".oden/build/" + target
+}
+
+///|
+fn route_bundle_command(args : Array[String]) -> OdenCliRoute {
+  let (path, extra_args) = match args {
+    [first, .. rest] if !starts_with_option(first) =>
+      (Some(first), rest.to_array())
+    _ => (None, args)
+  }
+  let target = find_flag_value(extra_args, "--target").unwrap_or("wasm-gc")
+  let out_dir = find_flag_value(extra_args, "--target-dir").unwrap_or(
+    bundle_target_dir(target),
+  )
+  let argv = build_plan_args(
+    "build",
+    path,
+    Some("src/main"),
+    Some(target),
+    extra_args,
+  )
+  if find_flag_value(extra_args, "--target-dir") is None {
+    argv.push("--target-dir")
+    argv.push(out_dir)
+  }
+  OdenCliRoute::Exec(OdenCliPlan::{
+    name: "bundle",
+    kind: "bundle",
+    program: "moon",
+    argv,
+    cwd: ".",
+    out_dir: Some(out_dir),
+    target,
   })
 }
 
@@ -213,6 +260,7 @@ fn route_task_command(args : Array[String]) -> OdenCliRoute {
     program: "just",
     argv,
     cwd: ".",
+    out_dir: None,
     target: "none",
   })
 }
@@ -271,16 +319,7 @@ pub fn route_cli(args : Array[String]) -> Result[OdenCliRoute, String] {
           rest.to_array(),
         ),
       )
-    ["bundle", .. rest] =>
-      Ok(
-        route_exec_moon_command(
-          "bundle",
-          "build",
-          Some("wasm-gc"),
-          Some("src/main"),
-          rest.to_array(),
-        ),
-      )
+    ["bundle", .. rest] => Ok(route_bundle_command(rest.to_array()))
     ["fmt", .. rest] =>
       Ok(route_exec_moon_command("fmt", "fmt", None, None, rest.to_array()))
     ["info", .. rest] =>

@@ -15,6 +15,8 @@ test "oden module can expose cli manifest" {
         ":" +
         value.contains("\"plan\"").to_string() +
         ":" +
+        value.contains("\"defaultOutDir\":\".oden/build/wasm-gc\"").to_string() +
+        ":" +
         value.contains("\"language\":\"moonbit\"").to_string() +
         ":" +
         value.contains("\"firstClassTargets\":[\"js\",\"wasm\"]").to_string() +
@@ -25,7 +27,7 @@ test "oden module can expose cli manifest" {
   }
   inspect(
     result,
-    content="Ok(\"true:true:true:true:true:true:true:true:true\")",
+    content="Ok(\"true:true:true:true:true:true:true:true:true:true\")",
   )
 }
 
@@ -62,6 +64,8 @@ test "oden routes bundle command to moon wasm build" {
       ":" +
       plan.target +
       ":" +
+      plan.out_dir.unwrap_or("none") +
+      ":" +
       plan.argv[0] +
       ":" +
       plan.argv[1] +
@@ -70,13 +74,17 @@ test "oden routes bundle command to moon wasm build" {
       ":" +
       plan.argv[3] +
       ":" +
-      plan.argv[4]
+      plan.argv[4] +
+      ":" +
+      plan.argv[5] +
+      ":" +
+      plan.argv[6]
     Ok(_) => "unexpected"
     Err(err) => err
   }
   inspect(
     result,
-    content="bundle:moon:wasm-gc:build:app/main:--target:wasm-gc:--release",
+    content="bundle:moon:wasm-gc:.oden/build/wasm-gc:build:app/main:--target:wasm-gc:--release:--target-dir:.oden/build/wasm-gc",
   )
 }
 
@@ -173,17 +181,55 @@ test "oden routes plan command without executing" {
       ":" +
       plan.target +
       ":" +
+      plan.out_dir.unwrap_or("none") +
+      ":" +
       plan.argv[0] +
       ":" +
       plan.argv[1] +
       ":" +
       plan.argv[2] +
       ":" +
-      plan.argv[3]
+      plan.argv[3] +
+      ":" +
+      plan.argv[4] +
+      ":" +
+      plan.argv[5]
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="bundle:moon:wasm-gc:build:app/main:--target:wasm-gc")
+  inspect(
+    result,
+    content="bundle:moon:wasm-gc:.oden/build/wasm-gc:build:app/main:--target:wasm-gc:--target-dir:.oden/build/wasm-gc",
+  )
+}
+
+///|
+test "oden keeps explicit bundle target dir override" {
+  let result = match
+    route_cli(["bundle", "--target", "js", "--target-dir", "dist/js"]) {
+    Ok(OdenCliRoute::Exec(plan)) =>
+      plan.target +
+      ":" +
+      plan.out_dir.unwrap_or("none") +
+      ":" +
+      plan.argv[0] +
+      ":" +
+      plan.argv[1] +
+      ":" +
+      plan.argv[2] +
+      ":" +
+      plan.argv[3] +
+      ":" +
+      plan.argv[4] +
+      ":" +
+      plan.argv[5]
+    Ok(_) => "unexpected"
+    Err(err) => err
+  }
+  inspect(
+    result,
+    content="js:dist/js:build:src/main:--target:js:--target-dir:dist/js",
+  )
 }
 
 ///|
@@ -213,8 +259,23 @@ test "oden can stringify plan json" {
     ":" +
     result.contains("\"argv\":[\"check\"]").to_string() +
     ":" +
+    result.contains("\"outDir\":null").to_string() +
+    ":" +
     result.contains("\"target\":\"none\"").to_string(),
-    content="true:true:true:true:true:true",
+    content="true:true:true:true:true:true:true",
+  )
+}
+
+///|
+test "oden can stringify bundle out dir in plan json" {
+  let result = match route_cli(["plan", "bundle"]) {
+    Ok(OdenCliRoute::Plan(plan)) => plan_json(plan)
+    Ok(_) => "unexpected"
+    Err(err) => err
+  }
+  inspect(
+    result.contains("\"outDir\":\".oden/build/wasm-gc\"").to_string(),
+    content="true",
   )
 }
 

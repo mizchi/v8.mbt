@@ -19,7 +19,7 @@ just run
 CLI router は次を提供します。
 
 - `run` / `check` / `test`: JS-first 既定で `moon` command に変換
-- `bundle`: wasm-first 既定で `moon build` に変換
+- `bundle`: wasm-first 既定で `moon build` に変換し、`--target-dir` 未指定なら `.oden/build/<target>` を使う
 - `fmt`: `moon fmt` へそのまま転送
 - `info`: JS-first 既定で `moon info` に変換
 - `task`: `just` へ変換し、引数なしなら `just --summary`
