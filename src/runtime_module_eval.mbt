@@ -145,6 +145,29 @@ pub fn Runtime::eval_module_handle_async_string_with_specifier(
 }
 
 ///|
+pub async fn Runtime::eval_module_handle_string_async(
+  self : Runtime,
+  source : String,
+) -> Result[ModuleHandle, V8Error] {
+  let module_eval = self.eval_module_handle_async_string(source)
+  guard module_eval is Ok(_) else { return Err(module_eval.unwrap_err()) }
+  module_eval.unwrap().await_ready_async()
+}
+
+///|
+pub async fn Runtime::eval_module_handle_string_async_with_specifier(
+  self : Runtime,
+  specifier : String,
+  source : String,
+) -> Result[ModuleHandle, V8Error] {
+  let module_eval = self.eval_module_handle_async_string_with_specifier(
+    specifier, source,
+  )
+  guard module_eval is Ok(_) else { return Err(module_eval.unwrap_err()) }
+  module_eval.unwrap().await_ready_async()
+}
+
+///|
 pub fn ModuleEvalHandle::module_handle(self : ModuleEvalHandle) -> ModuleHandle {
   self.module_handle_
 }

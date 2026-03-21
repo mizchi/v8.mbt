@@ -165,6 +165,8 @@ pub fn Runtime::eval_json_with_name(Self, String, String) -> Result[String, V8Er
 pub fn Runtime::eval_module_handle_async_string(Self, String) -> Result[ModuleEvalHandle, V8Error]
 pub fn Runtime::eval_module_handle_async_string_with_specifier(Self, String, String) -> Result[ModuleEvalHandle, V8Error]
 pub fn Runtime::eval_module_handle_string(Self, String) -> Result[ModuleHandle, V8Error]
+pub async fn Runtime::eval_module_handle_string_async(Self, String) -> Result[ModuleHandle, V8Error]
+pub async fn Runtime::eval_module_handle_string_async_with_specifier(Self, String, String) -> Result[ModuleHandle, V8Error]
 pub fn Runtime::eval_module_handle_string_with_specifier(Self, String, String) -> Result[ModuleHandle, V8Error]
 pub fn Runtime::eval_module_string(Self, String) -> Result[String, V8Error]
 pub fn Runtime::eval_module_string_with_specifier(Self, String, String) -> Result[String, V8Error]

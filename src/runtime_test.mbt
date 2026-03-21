@@ -1983,3 +1983,41 @@ async test "module eval handle can await ready through moonbit async event loop 
   }
   inspect(result, content="Ok(\"42\")")
 }
+
+///|
+async test "runtime can eval module handle string async with specifier through deno core ops" {
+  let result = with_runtime_async(runtime => {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+    let registered = runtime.register_async_json_task_result_callback(
+      "load_answer",
+      payload => {
+        @async.sleep(10)
+        if payload == "{\"base\":40}" {
+          Ok("{\"base\":40}")
+        } else {
+          Err("blocked")
+        }
+      },
+    )
+    guard registered is Ok(_) else { Err(registered.unwrap_err()) }
+    let module_handle = runtime.eval_module_handle_string_async_with_specifier(
+      "file:///feature/main.mjs", "const payload = await Deno.core.opAsync(Deno.core.ops.load_answer, { base: 40 }); export const answer = payload.base + 2;",
+    )
+    guard module_handle is Ok(_) else { Err(module_handle.unwrap_err()) }
+    module_handle.unwrap().get_export_json("answer")
+  })
+  inspect(result, content="Ok(\"42\")")
+}
+
+///|
+async test "runtime can eval module handle string async for plain top level await" {
+  let result = with_runtime_async(runtime => {
+    let module_handle = runtime.eval_module_handle_string_async(
+      "export const answer = await Promise.resolve(42);",
+    )
+    guard module_handle is Ok(_) else { Err(module_handle.unwrap_err()) }
+    module_handle.unwrap().get_export_json("answer")
+  })
+  inspect(result, content="Ok(\"42\")")
+}
