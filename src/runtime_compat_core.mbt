@@ -24,3 +24,23 @@ fn apply_snapshot_builder_compat(
 ) -> SnapshotBuilder {
   builder.eval(source)
 }
+
+///|
+fn runtime_has_deno_core_compat(runtime : Runtime) -> Bool {
+  runtime.state.val.compat.has_deno_core_compat
+}
+
+///|
+fn runtime_mark_deno_core_compat(runtime : Runtime) -> Unit {
+  runtime.state.val.compat.has_deno_core_compat = true
+}
+
+///|
+fn runtime_has_node_compat(runtime : Runtime) -> Bool {
+  runtime.state.val.compat.has_node_compat
+}
+
+///|
+fn runtime_mark_node_compat(runtime : Runtime) -> Unit {
+  runtime.state.val.compat.has_node_compat = true
+}

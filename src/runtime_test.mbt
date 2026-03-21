@@ -1412,6 +1412,38 @@ test "snapshot builder can preload deno core compat" {
 }
 
 ///|
+async test "runtime builder deno compat can await deno sleep" {
+  let result = match runtime_builder_new().with_deno_core_compat().build() {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      runtime.eval_promise_json_async(
+        "(async () => { await Deno.sleep(1); return { ok: true }; })()",
+      )
+    }
+    Err(err) => Err(err)
+  }
+  inspect(result, content="Ok(\"{\\\"ok\\\":true}\")")
+}
+
+///|
+async test "snapshot builder deno compat can run timeout callback" {
+  let result = match
+    snapshot_builder_new().with_deno_core_compat().build_runtime() {
+    Ok(runtime) => {
+      defer runtime.dispose()
+      runtime.eval_promise_json_async(
+        "(async () => { let values = ['start']; setTimeout((label) => { values.push(label); }, 0, 'timer'); values.push('queued'); await Deno.sleep(5); values.push('after'); return { values }; })()",
+      )
+    }
+    Err(err) => Err(err)
+  }
+  inspect(
+    result,
+    content="Ok(\"{\\\"values\\\":[\\\"start\\\",\\\"queued\\\",\\\"timer\\\",\\\"after\\\"]}\")",
+  )
+}
+
+///|
 test "snapshot builder can preload node compat" {
   let result = snapshot_builder_new()
     .with_node_compat()
@@ -1727,6 +1759,60 @@ async test "with_runtime_async can evaluate deno style promise json" {
     )
   })
   inspect(result, content="Ok(\"{\\\"answer\\\":42}\")")
+}
+
+///|
+async test "with_runtime_async can await deno sleep and timeout callback" {
+  let result = with_runtime_async(runtime => {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+    runtime.eval_promise_json_async(
+      "(async () => { let values = ['start']; setTimeout((label) => { values.push(label); }, 0, 'timer'); values.push('queued'); await Deno.sleep(5); values.push('after'); return { values, hasSleep: typeof Deno.sleep === 'function' }; })()",
+    )
+  })
+  inspect(
+    result,
+    content="Ok(\"{\\\"values\\\":[\\\"start\\\",\\\"queued\\\",\\\"timer\\\",\\\"after\\\"],\\\"hasSleep\\\":true}\")",
+  )
+}
+
+///|
+async test "with_runtime_async can clear timeout in deno compat" {
+  let result = with_runtime_async(runtime => {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+    runtime.eval_promise_json_async(
+      "(async () => { let value = 'A'; const id = setTimeout(() => { value = 'B'; }, 0); clearTimeout(id); await Deno.sleep(5); return { value }; })()",
+    )
+  })
+  inspect(result, content="Ok(\"{\\\"value\\\":\\\"A\\\"}\")")
+}
+
+///|
+async test "with_runtime_async can run and cancel interval in deno compat" {
+  let result = with_runtime_async(runtime => {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+    runtime.eval_promise_json_async(
+      "(async () => { let ticks = []; let id = 0; id = setInterval((label) => { ticks.push(label + ':' + ticks.length); if (ticks.length >= 3) clearInterval(id); }, 0, 'tick'); await Deno.sleep(8); return { ticks }; })()",
+    )
+  })
+  inspect(
+    result,
+    content="Ok(\"{\\\"ticks\\\":[\\\"tick:0\\\",\\\"tick:1\\\",\\\"tick:2\\\"]}\")",
+  )
+}
+
+///|
+async test "with_runtime_async can cancel interval before first tick" {
+  let result = with_runtime_async(runtime => {
+    let installed = runtime.install_deno_core_compat()
+    guard installed is Ok(_) else { Err(installed.unwrap_err()) }
+    runtime.eval_promise_json_async(
+      "(async () => { let count = 0; const id = setInterval(() => { count += 1; }, 0); clearInterval(id); await Deno.sleep(5); return { count }; })()",
+    )
+  })
+  inspect(result, content="Ok(\"{\\\"count\\\":0}\")")
 }
 
 ///|

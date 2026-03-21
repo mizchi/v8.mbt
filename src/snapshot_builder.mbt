@@ -32,6 +32,8 @@ struct SnapshotBuilderState {
   mut snapshot : Bytes
   mut has_snapshot : Bool
   sources : Array[String]
+  mut with_deno_core_compat : Bool
+  mut with_node_compat : Bool
 }
 
 ///|
@@ -46,6 +48,8 @@ pub fn snapshot_builder_new() -> SnapshotBuilder {
       snapshot: Bytes::default(),
       has_snapshot: false,
       sources: Array::default(),
+      with_deno_core_compat: false,
+      with_node_compat: false,
     }),
   }
 }
@@ -83,7 +87,16 @@ pub fn SnapshotBuilder::build_image(
   self : SnapshotBuilder,
 ) -> Result[RuntimeImage, V8Error] {
   match self.build() {
-    Ok(snapshot) => Ok(runtime_image_new(snapshot))
+    Ok(snapshot) =>
+      Ok(
+        runtime_image_from_parts(
+          snapshot,
+          true,
+          Array::default(),
+          self.state.val.with_deno_core_compat,
+          self.state.val.with_node_compat,
+        ),
+      )
     Err(err) => Err(err)
   }
 }

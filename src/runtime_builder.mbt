@@ -28,6 +28,8 @@ struct RuntimeBuilderState {
   mut has_snapshot : Bool
   snapshot_sources : Array[String]
   modules : Array[ModuleSource]
+  mut with_deno_core_compat : Bool
+  mut with_node_compat : Bool
 }
 
 ///|
@@ -43,6 +45,8 @@ pub fn runtime_builder_new() -> RuntimeBuilder {
       has_snapshot: false,
       snapshot_sources: Array::default(),
       modules: Array::default(),
+      with_deno_core_compat: false,
+      with_node_compat: false,
     }),
   }
 }
@@ -116,9 +120,21 @@ pub fn RuntimeBuilder::build_image(
     guard snapshot_result is Ok(_) else {
       return Err(snapshot_result.unwrap_err())
     }
-    runtime_image_new(snapshot_result.unwrap())
+    runtime_image_from_parts(
+      snapshot_result.unwrap(),
+      true,
+      Array::default(),
+      self.state.val.with_deno_core_compat,
+      self.state.val.with_node_compat,
+    )
   } else {
-    runtime_image_empty()
+    runtime_image_from_parts(
+      Bytes::default(),
+      false,
+      Array::default(),
+      self.state.val.with_deno_core_compat,
+      self.state.val.with_node_compat,
+    )
   }
   Ok(image.load_modules(self.state.val.modules))
 }

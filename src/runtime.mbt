@@ -31,6 +31,12 @@ priv struct RuntimeResourceTableState {
 }
 
 ///|
+priv struct RuntimeCompatState {
+  mut has_deno_core_compat : Bool
+  mut has_node_compat : Bool
+}
+
+///|
 pub struct RuntimeResource {
   rid : Int
   name : String
@@ -41,6 +47,7 @@ struct RuntimeState {
   mut handle : UInt64
   async_loop : RuntimeAsyncLoopState
   resources : RuntimeResourceTableState
+  compat : RuntimeCompatState
 }
 
 ///|
@@ -125,6 +132,10 @@ fn runtime_from_handle(
         resources: RuntimeResourceTableState::{
           next_rid: 1,
           entries: Map::new(),
+        },
+        compat: RuntimeCompatState::{
+          has_deno_core_compat: false,
+          has_node_compat: false,
         },
       }),
     })

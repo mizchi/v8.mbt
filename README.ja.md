@@ -133,7 +133,7 @@ match @v8.runtime_new() {
 - resource table: `add_resource`, `add_resource_with_close`, `list_resources`, `close_resource`, `try_close_resource`
 - direct async callback: `register_async_json_callback`, `register_async_bytes_callback`, `register_async_*_result_callback`
 - async event loop bridge: `with_runtime_async`, `register_async_*_task_*`, `eval_promise_*_async`, `PromiseHandle::await_*_async`, `ModuleEvalHandle::await_ready_async`, `Runtime::eval_module_handle_string_async`
-- deno compat: `Runtime::install_deno_core_compat`, `RuntimeBuilder::with_deno_core_compat`, `SnapshotBuilder::with_deno_core_compat`
+- deno compat: `Runtime::install_deno_core_compat`, `RuntimeBuilder::with_deno_core_compat`, `SnapshotBuilder::with_deno_core_compat`, `Deno.sleep`, 最小 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval`
 - minimal node shim: `Runtime::install_node_compat`, `RuntimeBuilder::with_node_compat`, `SnapshotBuilder::with_node_compat`
 - 失敗 reason は String に加えて JSON value でも返せます
 
@@ -144,6 +144,7 @@ match @v8.runtime_new() {
 - native target 専用です
 - embedder 向けの低レベル binding が主眼で、Deno 互換は `Deno.core` の op/util shim と最小の top-level `Deno` utility に限り、Node 互換も `global` / `process` / `Buffer` の最小 shim に限ります
 - MoonBit async event loop driver は 1 runtime あたり 1 本だけ同時に回せて、同じ lane の `take_async_*_op` 手動 loop とは混在させない前提です
+- `Deno.sleep` と最小 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` は queue ベース async op の上に載せているので、`with_runtime_async` / `eval_promise_*_async` / `PromiseHandle::await_*_async` の経路で使う前提です
 - mooncakes の consumer 側では現在も 1 回限りの setup が必要です
 - local path dependency では install hook は自動実行されませんが、`setup-consumer.mjs --build-bridge` で同等の初期化を寄せられます
 

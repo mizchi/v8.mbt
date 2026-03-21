@@ -42,13 +42,25 @@ fn node_compat_source() -> String {
 
 ///|
 pub fn Runtime::install_node_compat(self : Runtime) -> Result[Unit, V8Error] {
-  install_compat_source(self, "file:///compat/node.js", node_compat_source())
+  if runtime_has_node_compat(self) {
+    Ok(())
+  } else {
+    let installed = install_compat_source(
+      self,
+      "file:///compat/node.js",
+      node_compat_source(),
+    )
+    guard installed is Ok(_) else { return Err(installed.unwrap_err()) }
+    runtime_mark_node_compat(self)
+    Ok(())
+  }
 }
 
 ///|
 pub fn RuntimeBuilder::with_node_compat(
   self : RuntimeBuilder,
 ) -> RuntimeBuilder {
+  self.state.val.with_node_compat = true
   apply_runtime_builder_compat(self, node_compat_source())
 }
 
@@ -56,5 +68,6 @@ pub fn RuntimeBuilder::with_node_compat(
 pub fn SnapshotBuilder::with_node_compat(
   self : SnapshotBuilder,
 ) -> SnapshotBuilder {
+  self.state.val.with_node_compat = true
   apply_snapshot_builder_compat(self, node_compat_source())
 }

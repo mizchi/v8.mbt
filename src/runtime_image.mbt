@@ -3,6 +3,8 @@ struct RuntimeImageState {
   snapshot : Bytes
   has_snapshot : Bool
   modules : Array[ModuleSource]
+  with_deno_core_compat : Bool
+  with_node_compat : Bool
 }
 
 ///|
@@ -15,20 +17,23 @@ fn runtime_image_from_parts(
   snapshot : Bytes,
   has_snapshot : Bool,
   modules : Array[ModuleSource],
+  with_deno_core_compat : Bool,
+  with_node_compat : Bool,
 ) -> RuntimeImage {
   RuntimeImage::{
-    state: Ref::new(RuntimeImageState::{ snapshot, has_snapshot, modules }),
+    state: Ref::new(RuntimeImageState::{
+      snapshot,
+      has_snapshot,
+      modules,
+      with_deno_core_compat,
+      with_node_compat,
+    }),
   }
 }
 
 ///|
-fn runtime_image_empty() -> RuntimeImage {
-  runtime_image_from_parts(Bytes::default(), false, Array::default())
-}
-
-///|
 pub fn runtime_image_new(snapshot : Bytes) -> RuntimeImage {
-  runtime_image_from_parts(snapshot, true, Array::default())
+  runtime_image_from_parts(snapshot, true, Array::default(), false, false)
 }
 
 ///|
@@ -63,6 +68,20 @@ pub fn RuntimeImage::build_runtime(
   }
   match runtime_result {
     Ok(runtime) => {
+      if self.state.val.with_deno_core_compat {
+        let installed = runtime.install_deno_core_compat()
+        guard installed is Ok(_) else {
+          runtime.dispose()
+          return Err(installed.unwrap_err())
+        }
+      }
+      if self.state.val.with_node_compat {
+        let installed = runtime.install_node_compat()
+        guard installed is Ok(_) else {
+          runtime.dispose()
+          return Err(installed.unwrap_err())
+        }
+      }
       let loaded = runtime.load_modules(self.state.val.modules)
       guard loaded is Ok(_) else {
         runtime.dispose()
