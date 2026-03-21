@@ -406,6 +406,42 @@ test "oden builder preloads compat" {
 }
 
 ///|
+test "oden run image preloads runtime globals from snapshot" {
+  let result = match run_image_new() {
+    Ok(image) =>
+      image.with_runtime(fn(runtime) {
+        runtime.eval_json(
+          "({ sameCore: Oden.core === Deno.core, hasConsoleLog: typeof console.log === 'function', hasConsoleError: typeof console.error === 'function', hasProcessExit: typeof process.exit === 'function', hasPrepareRun: typeof Oden.__prepareRun === 'function' })",
+        )
+      })
+    Err(err) => Err(err)
+  }
+  inspect(
+    result,
+    content="Ok(\"{\\\"sameCore\\\":true,\\\"hasConsoleLog\\\":true,\\\"hasConsoleError\\\":true,\\\"hasProcessExit\\\":true,\\\"hasPrepareRun\\\":true}\")",
+  )
+}
+
+///|
+test "oden can prepare run runtime from snapshot image" {
+  let result = match run_image_new() {
+    Ok(image) =>
+      image.with_runtime(fn(runtime) {
+        let prepared = prepare_run_runtime(runtime, ["left", "right"])
+        guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
+        runtime.eval_json(
+          "({ odenArgs: Oden.args, denoArgs: Deno.args, exitCode: process.exitCode, odenExitCode: Oden.exitCode })",
+        )
+      })
+    Err(err) => Err(err)
+  }
+  inspect(
+    result,
+    content="Ok(\"{\\\"odenArgs\\\":[\\\"left\\\",\\\"right\\\"],\\\"denoArgs\\\":[\\\"left\\\",\\\"right\\\"],\\\"exitCode\\\":0,\\\"odenExitCode\\\":0}\")",
+  )
+}
+
+///|
 test "oden can install compat on raw runtime" {
   let result = @v8.with_runtime(fn(runtime) {
     let installed = install(runtime)

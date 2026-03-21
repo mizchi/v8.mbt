@@ -19,6 +19,13 @@ async fn write_text_file(path : String, content : String) -> Unit {
 }
 
 ///|
+fn new_run_runtime() -> Result[@v8.Runtime, String] {
+  let runtime = @oden.run_builder_new().build()
+  guard runtime is Ok(_) else { return Err(runtime.unwrap_err().to_string()) }
+  Ok(runtime.unwrap())
+}
+
+///|
 async fn write_temp_run_module(
   dir : String,
   async_main? : Bool = false,
@@ -129,7 +136,7 @@ async test "built js runtime runner sets args and drains timeout" {
   write_text_file(
     script_path, "globalThis.__args = Oden.args.slice(); globalThis.__ticks = []; setTimeout(() => { globalThis.__ticks.push('tick') }, 0);",
   )
-  let result = match @v8.runtime_new() {
+  let result = match new_run_runtime() {
     Ok(runtime) => {
       defer runtime.dispose()
       let executed = run_built_js_on_runtime(runtime, script_path, ["a", "b"])
@@ -168,7 +175,7 @@ async test "built js runtime runner separates stdout stderr and exit code" {
   write_text_file(
     script_path, "console.log('out'); console.error('err'); process.exitCode = 7;",
   )
-  let result = match @v8.runtime_new() {
+  let result = match new_run_runtime() {
     Ok(runtime) => {
       defer runtime.dispose()
       let executed = run_built_js_on_runtime(runtime, script_path, [])
@@ -193,7 +200,7 @@ async test "built js runtime runner surfaces guest throw on stderr" {
   ensure_dir(dir)
   let script_path = dir + "/entry.js"
   write_text_file(script_path, "throw new Error('boom');")
-  let result = match @v8.runtime_new() {
+  let result = match new_run_runtime() {
     Ok(runtime) => {
       defer runtime.dispose()
       let executed = run_built_js_on_runtime(runtime, script_path, [])

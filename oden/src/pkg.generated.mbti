@@ -16,7 +16,15 @@ pub fn install(@v8.Runtime) -> Result[Unit, @v8.V8Error]
 
 pub fn plan_json(OdenCliPlan) -> String
 
+pub fn prepare_run_runtime(@v8.Runtime, Array[String]) -> Result[Unit, @v8.V8Error]
+
 pub fn route_cli(Array[String]) -> Result[OdenCliRoute, String]
+
+pub fn run_builder_new() -> @v8.RuntimeBuilder
+
+pub fn run_image_new() -> Result[@v8.RuntimeImage, @v8.V8Error]
+
+pub fn run_snapshot_builder_new() -> @v8.SnapshotBuilder
 
 pub fn snapshot_builder_new() -> @v8.SnapshotBuilder
 

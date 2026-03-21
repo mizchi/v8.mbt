@@ -202,11 +202,6 @@ async fn read_module_config(cwd : String) -> Result[(String, String), String] {
 }
 
 ///|
-fn guest_args_json(guest_args : Array[String]) -> String {
-  Json::array(guest_args.map(arg => Json::string(arg))).stringify()
-}
-
-///|
 fn console_payload_text(payload : String) -> String {
   let parsed = @json.parse(payload) catch { _ => Json::string(payload) }
   match parsed {
@@ -216,7 +211,7 @@ fn console_payload_text(payload : String) -> String {
 }
 
 ///|
-fn install_console_shim(
+fn register_console_callbacks(
   runtime : @v8.Runtime,
   stdout_lines : Ref[Array[String]],
   stderr_lines : Ref[Array[String]],
@@ -241,29 +236,16 @@ fn install_console_shim(
   guard stderr_registered is Ok(_) else {
     return Err(stderr_registered.unwrap_err().to_string())
   }
-  let installed = runtime.eval_string_with_name(
-    "file:///compat/oden-console.js", "(function(){ const root = globalThis; const oden = root.Oden ?? (root.Oden = {}); const format = function(value){ if (typeof value === 'string') return value; try { const text = JSON.stringify(value); return text === undefined ? String(value) : text; } catch (_) { return String(value); } }; const write = function(op, args){ const text = Array.prototype.slice.call(args).map(format).join(' '); MoonBit.opSync(op, text); }; root.console = { log: function(...args){ write('__oden_console_stdout__', args); }, info: function(...args){ write('__oden_console_stdout__', args); }, debug: function(...args){ write('__oden_console_stdout__', args); }, error: function(...args){ write('__oden_console_stderr__', args); }, warn: function(...args){ write('__oden_console_stderr__', args); } }; const process = (typeof root.process === 'object' && root.process !== null) ? root.process : (root.process = {}); if (typeof process.exitCode !== 'number') process.exitCode = 0; const exitImpl = function(code){ const next = Number.isFinite(code) ? (code | 0) : 1; oden.exitCode = next; process.exitCode = next; return next; }; process.exit = exitImpl; if (typeof oden.exitCode !== 'number') oden.exitCode = 0; oden.exit = exitImpl; })()",
-  )
-  guard installed is Ok(_) else {
-    return Err(installed.unwrap_err().to_string())
-  }
   Ok(())
 }
 
 ///|
-fn apply_guest_args(
+fn prepare_guest_run_state(
   runtime : @v8.Runtime,
   guest_args : Array[String],
 ) -> Result[Unit, String] {
-  let args_json = guest_args_json(guest_args)
-  let set = runtime.eval_string(
-    "globalThis.Deno.args = " +
-    args_json +
-    "; globalThis.Oden.args = " +
-    args_json +
-    ";",
-  )
-  guard set is Ok(_) else { return Err(set.unwrap_err().to_string()) }
+  let prepared = @oden.prepare_run_runtime(runtime, guest_args)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err().to_string()) }
   Ok(())
 }
 
@@ -319,18 +301,14 @@ async fn run_built_js_on_runtime(
 ) -> Result[OdenJsRunResult, String] {
   let stdout_lines = Ref::new([])
   let stderr_lines = Ref::new([])
-  let installed = @oden.install(runtime)
-  guard installed is Ok(_) else {
-    return Err(installed.unwrap_err().to_string())
-  }
-  let console_installed = install_console_shim(
+  let callbacks_registered = register_console_callbacks(
     runtime, stdout_lines, stderr_lines,
   )
-  guard console_installed is Ok(_) else {
-    return Err(console_installed.unwrap_err())
+  guard callbacks_registered is Ok(_) else {
+    return Err(callbacks_registered.unwrap_err())
   }
-  let args_applied = apply_guest_args(runtime, guest_args)
-  guard args_applied is Ok(_) else { return Err(args_applied.unwrap_err()) }
+  let prepared = prepare_guest_run_state(runtime, guest_args)
+  guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let source = @fs.read_file(built_js_path).text() catch {
     err =>
       return Err("failed to read " + built_js_path + ": " + err.to_string())
@@ -432,7 +410,9 @@ async fn execute_js_run_plan_in_cwd(
       invocation.is_release,
     ),
   )
-  let runtime = @v8.runtime_new()
+  let image = @oden.run_image_new()
+  guard image is Ok(_) else { return Err(image.unwrap_err().to_string()) }
+  let runtime = image.unwrap().build_runtime()
   guard runtime is Ok(_) else { return Err(runtime.unwrap_err().to_string()) }
   let runtime = runtime.unwrap()
   defer runtime.dispose()
