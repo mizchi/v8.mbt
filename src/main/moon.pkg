@@ -2,12 +2,13 @@ import {
   "mizchi/v8",
 }
 
+supported_targets = "native"
+
 options(
   "is-main": true,
   link: {
     "native": {
-      "cc-link-flags": "target/rusty_v8_bridge/release/librusty_v8_bridge.a -lc++ -pthread -framework CoreFoundation",
+      "cc-link-flags": "target/rusty_v8_bridge/release/librusty_v8_bridge.link -lc++ -pthread -framework CoreFoundation",
     },
   },
-  "supported-targets": "native",
 )

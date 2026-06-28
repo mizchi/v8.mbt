@@ -1,6 +1,6 @@
 # mizchi/v8
 
-[English](README.md) | [日本語](README.ja.md)
+[English](README.md) | [Japanese](README.ja.md)
 
 `mizchi/v8` is a native-only V8 binding for MoonBit. It is intended as a foundation for prototyping embedded runtimes in the style of Node or Deno.
 
@@ -21,7 +21,7 @@
 
 ## Status
 
-- version: `0.2.0`
+- version: `0.3.0`
 - target: `native`
 - usable as an embedder-facing experimental binding
 - implementation status and known gaps are tracked in [docs/development-log.md](docs/development-log.md)
@@ -62,6 +62,21 @@ node ../v8.mbt/src/scripts/setup-consumer.mjs --module-root . --main-pkg cmd/mai
 - network access to GitHub, crates.io, and the `rusty_v8` release mirror
 
 The published package also uses a `postadd` hook to eagerly build the native bridge in the installed module cache. The one-time consumer module setup is still required today, but the setup script above automates the common mooncakes workflow.
+
+### Native Build Egress and Skips
+
+`build-rusty-v8.sh` fetches the pinned `rusty_v8` source via the GitHub HTTPS archive endpoint and initializes `deps/rusty_v8` locally. The source fetch does not require `git clone` egress, which matters in CI environments where HTTPS works but the git channel is scoped or blocked. Cargo still needs access to crates.io and the `rusty_v8` release mirror for prebuilt artifacts.
+
+For non-native jobs that only resolve the MoonBit workspace, set `MIZCHI_V8_OPTIONAL=1` or `CRATER_SKIP_V8_BUILD=1` before `moon add` / workspace resolution. The `postadd` hook will write a skipped stamp and exit successfully instead of building V8.
+
+Behind a proxy, prefer prefetching the `rusty_v8` static archive with `curl` and passing the local file through `RUSTY_V8_ARCHIVE`; this avoids the upstream downloader path that can surface as a `Decompression error` under some proxy rewrites.
+
+```bash
+target=$(rustc -vV | awk '/host:/{print $2}')
+curl -L --fail -o /tmp/librusty_v8.a.gz \
+  "https://github.com/denoland/rusty_v8/releases/download/v146.8.0/librusty_v8_release_${target}.a.gz"
+RUSTY_V8_ARCHIVE=/tmp/librusty_v8.a.gz just bootstrap
+```
 
 ### Develop From Source
 

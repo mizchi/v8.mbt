@@ -40,7 +40,7 @@ pub struct RuntimeBuilder {
 ///|
 pub fn runtime_builder_new() -> RuntimeBuilder {
   RuntimeBuilder::{
-    state: Ref::new(RuntimeBuilderState::{
+    state: Ref(RuntimeBuilderState::{
       snapshot: Bytes::default(),
       has_snapshot: false,
       snapshot_sources: Array::default(),

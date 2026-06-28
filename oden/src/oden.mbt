@@ -110,7 +110,7 @@ pub fn version_text() -> String {
 
 ///|
 pub fn plan_json(plan : OdenCliPlan) -> String {
-  let values : Map[String, Json] = Map::new()
+  let values : Map[String, Json] = Map([])
   values.set("name", Json::string(plan.name))
   values.set("kind", Json::string(plan.kind))
   values.set("program", Json::string(plan.program))

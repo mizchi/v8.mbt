@@ -1,4 +1,5 @@
 rusty_v8 ready
 rev: v146.8.0
-archive: /Users/mz/ghq/github.com/mizchi/v8.mbt/target/rusty_v8_bridge/release/librusty_v8_bridge.a
-generated: 2026-03-20T15:33:55Z
+library: /Users/mz/ghq/github.com/mizchi/v8.mbt/target/rusty_v8_bridge/release/librusty_v8_bridge.dylib
+link: /Users/mz/ghq/github.com/mizchi/v8.mbt/target/rusty_v8_bridge/release/librusty_v8_bridge.link
+generated: 2026-06-28T16:51:01Z

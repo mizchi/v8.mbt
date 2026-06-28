@@ -73,7 +73,7 @@
 
 ## 設計メモ
 
-- MoonBit 側は `Runtime` と handle 群、Rust 側は小さい staticlib bridge に分離する
+- MoonBit 側は `Runtime` と handle 群、Rust 側は小さい native library bridge に分離する
 - `rusty_v8` の複雑な初期化やリンクは Rust 側に閉じ込める
 - public API は MoonBit で安定化し、Rust 実装は再生成・差し替えしやすい構造を保つ
 - 値 bridge はまず JSON / bytes の 2 lane に絞り、イベントループ実験で必要な経路を先に揃える

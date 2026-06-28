@@ -6,7 +6,7 @@ pub fn Runtime::eval_json(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let source_bytes = @utf8.encode(source)
+  let source_bytes = utf8_encode(source)
   let result_bytes = runtime_eval_json_native(
     handle,
     source_bytes,
@@ -25,8 +25,8 @@ pub fn Runtime::eval_json_with_name(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let resource_name_bytes = @utf8.encode(resource_name)
-  let source_bytes = @utf8.encode(source)
+  let resource_name_bytes = utf8_encode(resource_name)
+  let source_bytes = utf8_encode(source)
   let result_bytes = runtime_eval_json_with_name_native(
     handle,
     resource_name_bytes,
@@ -48,7 +48,7 @@ pub fn Runtime::eval_async_json(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let source_bytes = @utf8.encode(source)
+  let source_bytes = utf8_encode(source)
   let result_bytes = runtime_eval_async_json_native(
     handle,
     source_bytes,
@@ -69,8 +69,8 @@ pub fn Runtime::eval_async_json_with_name(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let resource_name_bytes = @utf8.encode(resource_name)
-  let source_bytes = @utf8.encode(source)
+  let resource_name_bytes = utf8_encode(resource_name)
+  let source_bytes = utf8_encode(source)
   let result_bytes = runtime_eval_async_json_with_name_native(
     handle,
     resource_name_bytes,
@@ -93,8 +93,8 @@ pub fn Runtime::set_global_json(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
-  let json_bytes = @utf8.encode(json)
+  let name_bytes = utf8_encode(name)
+  let json_bytes = utf8_encode(json)
   runtime_set_global_json_native(
     handle,
     name_bytes,
@@ -114,7 +114,7 @@ pub fn Runtime::get_global_json(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   let result_bytes = runtime_get_global_json_native(
     handle,
     name_bytes,
@@ -165,8 +165,8 @@ pub fn Runtime::call_global_json(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
-  let args_json_bytes = @utf8.encode(args_json)
+  let name_bytes = utf8_encode(name)
+  let args_json_bytes = utf8_encode(args_json)
   let result_bytes = runtime_call_global_json_native(
     handle,
     name_bytes,

@@ -4,8 +4,11 @@ All notable changes to this project should be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-29
+
 ### Added
 
+- Script-level tests for the `rusty_v8` source fetch path and `postadd` skip behavior
 - Property-based test example with `moonbitlang/quickcheck`
 - Package-level `src/README.mbt.md` with executable examples
 - `just ci`, `just ci-all`, `just fmt-check`, and `just info-check`
@@ -31,6 +34,8 @@ All notable changes to this project should be documented in this file.
 
 ### Changed
 
+- `build-rusty-v8.sh` now fetches the pinned `rusty_v8` source through GitHub HTTPS archives instead of `git clone`
+- Native build troubleshooting now documents scoped git egress, `postadd` skip envs, and `RUSTY_V8_ARCHIVE` proxy workarounds
 - GitHub Actions CI now verifies formatting and generated `.mbti` files
 - CI now runs `native` checks on both Ubuntu and macOS
 - Root README is now user-facing and split into English and Japanese entry points
@@ -40,6 +45,7 @@ All notable changes to this project should be documented in this file.
 
 ### Fixed
 
+- `postadd` now respects `MIZCHI_V8_OPTIONAL` and `CRATER_SKIP_V8_BUILD` by writing a skipped stamp and exiting successfully
 - Removed the broken `hello()` example from the published README path
 - Aligned local `just` workflows with the CI entrypoints
 - Packaged docs now explain the native build prerequisites and current mooncakes consumer limitation

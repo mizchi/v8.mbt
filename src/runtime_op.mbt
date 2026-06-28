@@ -33,18 +33,18 @@ fn encode_callback_ok(payload : Bytes) -> Bytes {
 
 ///|
 fn encode_callback_err(message : String) -> Bytes {
-  Bytes::from_array([1]) + @utf8.encode(message)
+  Bytes::from_array([1]) + utf8_encode(message)
 }
 
 ///|
 fn encode_callback_json_err(error_json : String) -> Bytes {
-  Bytes::from_array([2]) + @utf8.encode(error_json)
+  Bytes::from_array([2]) + utf8_encode(error_json)
 }
 
 ///|
 fn encode_json_callback_result(result : Result[String, String]) -> Bytes {
   match result {
-    Ok(json) => encode_callback_ok(@utf8.encode(json))
+    Ok(json) => encode_callback_ok(utf8_encode(json))
     Err(message) => encode_callback_err(message)
   }
 }
@@ -54,7 +54,7 @@ fn encode_json_callback_result_with_json_error(
   result : Result[String, String],
 ) -> Bytes {
   match result {
-    Ok(json) => encode_callback_ok(@utf8.encode(json))
+    Ok(json) => encode_callback_ok(utf8_encode(json))
     Err(error_json) => encode_callback_json_err(error_json)
   }
 }
@@ -85,7 +85,7 @@ pub fn Runtime::register_sync_json_op(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_sync_json_op_native(
     handle,
     name_bytes,
@@ -105,9 +105,9 @@ pub fn Runtime::push_sync_json_op_response(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
-  let payload_json_bytes = @utf8.encode(payload_json)
-  let result_json_bytes = @utf8.encode(result_json)
+  let name_bytes = utf8_encode(name)
+  let payload_json_bytes = utf8_encode(payload_json)
+  let result_json_bytes = utf8_encode(result_json)
   runtime_push_sync_json_op_response_native(
     handle,
     name_bytes,
@@ -132,14 +132,14 @@ pub fn Runtime::register_sync_json_callback(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_sync_json_callback_native(
     handle,
     name_bytes,
     name_bytes.length(),
     fn(call, payload) { call(payload) },
     fn(payload) {
-      encode_json_callback_result(Ok(callback(@utf8.decode_lossy(payload))))
+      encode_json_callback_result(Ok(callback(utf8_decode_lossy(payload))))
     },
     err_ptr,
   )
@@ -157,14 +157,14 @@ pub fn Runtime::register_sync_json_result_callback(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_sync_json_callback_native(
     handle,
     name_bytes,
     name_bytes.length(),
     fn(call, payload) { call(payload) },
     fn(payload) {
-      encode_json_callback_result(callback(@utf8.decode_lossy(payload)))
+      encode_json_callback_result(callback(utf8_decode_lossy(payload)))
     },
     err_ptr,
   )
@@ -182,7 +182,7 @@ pub fn Runtime::register_sync_json_result_callback_with_json_error(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_sync_json_callback_native(
     handle,
     name_bytes,
@@ -190,7 +190,7 @@ pub fn Runtime::register_sync_json_result_callback_with_json_error(
     fn(call, payload) { call(payload) },
     fn(payload) {
       encode_json_callback_result_with_json_error(
-        callback(@utf8.decode_lossy(payload)),
+        callback(utf8_decode_lossy(payload)),
       )
     },
     err_ptr,
@@ -208,7 +208,7 @@ pub fn Runtime::register_sync_bytes_op(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_sync_bytes_op_native(
     handle,
     name_bytes,
@@ -227,7 +227,7 @@ pub fn Runtime::register_sync_bytes_callback(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_sync_bytes_callback_native(
     handle,
     name_bytes,
@@ -250,7 +250,7 @@ pub fn Runtime::register_sync_bytes_result_callback(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_sync_bytes_callback_native(
     handle,
     name_bytes,
@@ -273,7 +273,7 @@ pub fn Runtime::register_sync_bytes_result_callback_with_json_error(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_sync_bytes_callback_native(
     handle,
     name_bytes,
@@ -299,7 +299,7 @@ pub fn Runtime::push_sync_bytes_op_response(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_push_sync_bytes_op_response_native(
     handle,
     name_bytes,
@@ -323,7 +323,7 @@ pub fn Runtime::register_async_json_op(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_async_json_op_native(
     handle,
     name_bytes,
@@ -342,14 +342,14 @@ pub fn Runtime::register_async_json_callback(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_async_json_callback_native(
     handle,
     name_bytes,
     name_bytes.length(),
     fn(call, payload) { call(payload) },
     fn(payload) {
-      encode_json_callback_result(Ok(callback(@utf8.decode_lossy(payload))))
+      encode_json_callback_result(Ok(callback(utf8_decode_lossy(payload))))
     },
     err_ptr,
   )
@@ -367,14 +367,14 @@ pub fn Runtime::register_async_json_result_callback(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_async_json_callback_native(
     handle,
     name_bytes,
     name_bytes.length(),
     fn(call, payload) { call(payload) },
     fn(payload) {
-      encode_json_callback_result(callback(@utf8.decode_lossy(payload)))
+      encode_json_callback_result(callback(utf8_decode_lossy(payload)))
     },
     err_ptr,
   )
@@ -392,7 +392,7 @@ pub fn Runtime::register_async_json_result_callback_with_json_error(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_async_json_callback_native(
     handle,
     name_bytes,
@@ -400,7 +400,7 @@ pub fn Runtime::register_async_json_result_callback_with_json_error(
     fn(call, payload) { call(payload) },
     fn(payload) {
       encode_json_callback_result_with_json_error(
-        callback(@utf8.decode_lossy(payload)),
+        callback(utf8_decode_lossy(payload)),
       )
     },
     err_ptr,
@@ -418,7 +418,7 @@ pub fn Runtime::register_async_bytes_op(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_async_bytes_op_native(
     handle,
     name_bytes,
@@ -437,7 +437,7 @@ pub fn Runtime::register_async_bytes_callback(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_async_bytes_callback_native(
     handle,
     name_bytes,
@@ -460,7 +460,7 @@ pub fn Runtime::register_async_bytes_result_callback(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_async_bytes_callback_native(
     handle,
     name_bytes,
@@ -483,7 +483,7 @@ pub fn Runtime::register_async_bytes_result_callback_with_json_error(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_register_async_bytes_callback_native(
     handle,
     name_bytes,
@@ -680,7 +680,7 @@ pub fn Runtime::resolve_async_json_op(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let result_json_bytes = @utf8.encode(result_json)
+  let result_json_bytes = utf8_encode(result_json)
   runtime_resolve_async_json_op_native(
     handle,
     op_id,
@@ -719,7 +719,7 @@ pub fn Runtime::reject_async_json_op(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let message_bytes = @utf8.encode(message)
+  let message_bytes = utf8_encode(message)
   runtime_reject_async_json_op_native(
     handle,
     op_id,
@@ -739,7 +739,7 @@ pub fn Runtime::reject_async_json_op_with_json(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let error_json_bytes = @utf8.encode(error_json)
+  let error_json_bytes = utf8_encode(error_json)
   runtime_reject_async_json_op_with_json_native(
     handle,
     op_id,
@@ -761,7 +761,7 @@ pub fn Runtime::reject_async_bytes_op(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let message_bytes = @utf8.encode(message)
+  let message_bytes = utf8_encode(message)
   runtime_reject_async_bytes_op_native(
     handle,
     op_id,
@@ -781,7 +781,7 @@ pub fn Runtime::reject_async_bytes_op_with_json(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let error_json_bytes = @utf8.encode(error_json)
+  let error_json_bytes = utf8_encode(error_json)
   runtime_reject_async_bytes_op_with_json_native(
     handle,
     op_id,

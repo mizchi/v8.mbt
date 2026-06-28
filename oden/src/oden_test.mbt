@@ -29,7 +29,7 @@ test "oden module can expose cli manifest" {
       )
     Err(err) => Err(err)
   }
-  inspect(
+  @debug.debug_inspect(
     result,
     content="Ok(\"true:true:true:true:true:true:true:true:true:true:true:true\")",
   )
@@ -57,7 +57,7 @@ test "oden routes run command to moon js target" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="run:moon:js:.oden/run:run:src/main:--target:js")
+  @debug.debug_inspect(result, content="run:moon:js:.oden/run:run:src/main:--target:js")
 }
 
 ///|
@@ -82,7 +82,7 @@ test "oden routes run command with wasm target to moon subprocess" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="run:moon:wasm-gc:none:run:src/main:--target:wasm-gc")
+  @debug.debug_inspect(result, content="run:moon:wasm-gc:none:run:src/main:--target:wasm-gc")
 }
 
 ///|
@@ -113,7 +113,7 @@ test "oden routes bundle command to moon wasm build" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(
+  @debug.debug_inspect(
     result,
     content="bundle:moon:wasm-gc:.oden/build/wasm-gc:build:app/main:--target:wasm-gc:--release:--target-dir:.oden/build/wasm-gc",
   )
@@ -127,7 +127,7 @@ test "oden keeps explicit target override" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="wasm:check:--target:wasm")
+  @debug.debug_inspect(result, content="wasm:check:--target:wasm")
 }
 
 ///|
@@ -146,7 +146,7 @@ test "oden routes fmt command without target injection" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="fmt:moon:none:fmt:--check")
+  @debug.debug_inspect(result, content="fmt:moon:none:fmt:--check")
 }
 
 ///|
@@ -167,7 +167,7 @@ test "oden routes info command to moon info js target" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="info:moon:js:info:--target:js")
+  @debug.debug_inspect(result, content="info:moon:js:info:--target:js")
 }
 
 ///|
@@ -178,7 +178,7 @@ test "oden routes task summary to just" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="task:just:none:--summary")
+  @debug.debug_inspect(result, content="task:just:none:--summary")
 }
 
 ///|
@@ -199,7 +199,7 @@ test "oden routes task arguments to just without rewriting" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="task:just:none:check:--target:native")
+  @debug.debug_inspect(result, content="task:just:none:check:--target:native")
 }
 
 ///|
@@ -228,7 +228,7 @@ test "oden routes plan command without executing" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(
+  @debug.debug_inspect(
     result,
     content="bundle:moon:wasm-gc:.oden/build/wasm-gc:build:app/main:--target:wasm-gc:--target-dir:.oden/build/wasm-gc",
   )
@@ -257,7 +257,7 @@ test "oden keeps explicit bundle target dir override" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(
+  @debug.debug_inspect(
     result,
     content="js:dist/js:build:src/main:--target:js:--target-dir:dist/js",
   )
@@ -269,7 +269,7 @@ test "oden rejects empty plan command" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(result, content="plan requires a subcommand")
+  @debug.debug_inspect(result, content="plan requires a subcommand")
 }
 
 ///|
@@ -279,7 +279,7 @@ test "oden can stringify plan json" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(
+  @debug.debug_inspect(
     result.contains("\"name\":\"task\"").to_string() +
     ":" +
     result.contains("\"program\":\"just\"").to_string() +
@@ -306,7 +306,7 @@ test "oden can stringify bundle out dir in plan json" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(
+  @debug.debug_inspect(
     result.contains("\"outDir\":\".oden/build/wasm-gc\"").to_string(),
     content="true",
   )
@@ -320,7 +320,7 @@ test "oden can stringify embedded v8 run plan json" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(
+  @debug.debug_inspect(
     result.contains("\"execution\":\"embedded-v8\"").to_string() +
     ":" +
     result.contains("\"buildProgram\":\"moon\"").to_string() +
@@ -345,7 +345,7 @@ test "oden can stringify wasm run subprocess plan json" {
     Ok(_) => "unexpected"
     Err(err) => err
   }
-  inspect(
+  @debug.debug_inspect(
     result.contains("\"execution\":\"subprocess\"").to_string() +
     ":" +
     result.contains("\"target\":\"wasm\"").to_string() +
@@ -376,13 +376,13 @@ test "oden supports help and version aliases" {
     ) => "ok"
     _ => "unexpected"
   }
-  inspect(result, content="ok")
+  @debug.debug_inspect(result, content="ok")
 }
 
 ///|
 test "oden can expose version text" {
   let result = version_text()
-  inspect(
+  @debug.debug_inspect(
     result.contains("oden 0.0.0-mizchi-v8").to_string() +
     ":" +
     result.contains("v8 ").to_string() +
@@ -399,7 +399,7 @@ test "oden builder preloads compat" {
       "({ sameCore: Oden.core === Deno.core, runExecution: Oden.cli.command('run').execution, runOutDir: Oden.cli.command('run').defaultOutDir, bundleTarget: Oden.cli.command('bundle').defaultTarget, hasFmt: Oden.cli.command('fmt') !== null, hasTask: Oden.cli.command('task') !== null, hasPlan: Oden.cli.command('plan') !== null, execPath: Oden.execPath() })",
     )
   })
-  inspect(
+  @debug.debug_inspect(
     result,
     content="Ok(\"{\\\"sameCore\\\":true,\\\"runExecution\\\":\\\"embedded-v8\\\",\\\"runOutDir\\\":\\\".oden/run\\\",\\\"bundleTarget\\\":\\\"wasm\\\",\\\"hasFmt\\\":true,\\\"hasTask\\\":true,\\\"hasPlan\\\":true,\\\"execPath\\\":\\\"/mizchi-oden/bin/oden\\\"}\")",
   )
@@ -416,7 +416,7 @@ test "oden run image preloads runtime globals from snapshot" {
       })
     Err(err) => Err(err)
   }
-  inspect(
+  @debug.debug_inspect(
     result,
     content="Ok(\"{\\\"sameCore\\\":true,\\\"hasConsoleLog\\\":true,\\\"hasConsoleError\\\":true,\\\"hasProcessExit\\\":true,\\\"hasPrepareRun\\\":true}\")",
   )
@@ -435,7 +435,7 @@ test "oden can prepare run runtime from snapshot image" {
       })
     Err(err) => Err(err)
   }
-  inspect(
+  @debug.debug_inspect(
     result,
     content="Ok(\"{\\\"odenArgs\\\":[\\\"left\\\",\\\"right\\\"],\\\"denoArgs\\\":[\\\"left\\\",\\\"right\\\"],\\\"exitCode\\\":0,\\\"odenExitCode\\\":0}\")",
   )
@@ -450,7 +450,7 @@ test "oden can install compat on raw runtime" {
       "({ hasSleep: typeof Oden.sleep === 'function', runTarget: Oden.cli.command('run').defaultTarget, hasInfo: Oden.cli.command('info') !== null })",
     )
   })
-  inspect(
+  @debug.debug_inspect(
     result,
     content="Ok(\"{\\\"hasSleep\\\":true,\\\"runTarget\\\":\\\"js\\\",\\\"hasInfo\\\":true}\")",
   )

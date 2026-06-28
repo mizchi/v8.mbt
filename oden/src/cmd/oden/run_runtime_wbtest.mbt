@@ -42,7 +42,7 @@ async fn write_temp_run_module(
     (
       #|{
       #|  "name": "tmp/oden_run_fixture",
-      #|  "version": "0.2.0",
+      #|  "version": "0.3.0",
       #|  "source": "src",
       #|  "deps": {
       #|    "moonbitlang/async": "0.16.8"
@@ -53,7 +53,7 @@ async fn write_temp_run_module(
     (
       #|{
       #|  "name": "tmp/oden_run_fixture",
-      #|  "version": "0.2.0",
+      #|  "version": "0.3.0",
       #|  "source": "src"
       #|}
     )
@@ -110,12 +110,12 @@ test "run invocation splits moon args and guest args" {
       invocation.guest_args.join(",")
     Err(err) => err
   }
-  inspect(result, content="app/main:.oden/run:true:3:foo,bar")
+  @debug.debug_inspect(result, content="app/main:.oden/run:true:3:foo,bar")
 }
 
 ///|
 test "resolve js artifact path for nested package" {
-  inspect(
+  @debug.debug_inspect(
     resolve_js_artifact_path(
       "tmp/oden_run_fixture", "src", "src/main", ".oden/run", false,
     ),
@@ -125,7 +125,7 @@ test "resolve js artifact path for nested package" {
 
 ///|
 test "resolve js artifact path for root package" {
-  inspect(
+  @debug.debug_inspect(
     resolve_js_artifact_path(
       "tmp/oden_run_fixture", "src", "src", ".oden/run", true,
     ),
@@ -166,7 +166,7 @@ async test "built js runtime runner sets args and drains timeout" {
     }
     Err(err) => Err(err.to_string())
   }
-  inspect(
+  @debug.debug_inspect(
     result,
     content="Ok(\"{\\\"args\\\":[\\\"a\\\",\\\"b\\\"],\\\"ticks\\\":[\\\"tick\\\"]}:0:0:0\")",
   )
@@ -196,7 +196,7 @@ async test "built js runtime runner separates stdout stderr and exit code" {
     }
     Err(err) => Err(err.to_string())
   }
-  inspect(result, content="Ok(\"7:out:err\")")
+  @debug.debug_inspect(result, content="Ok(\"7:out:err\")")
 }
 
 ///|
@@ -223,7 +223,7 @@ async test "built js runtime runner surfaces guest throw on stderr" {
     }
     Err(err) => Err(err.to_string())
   }
-  inspect(result, content="Ok(\"1:0:1:true\")")
+  @debug.debug_inspect(result, content="Ok(\"1:0:1:true\")")
 }
 
 ///|
@@ -231,7 +231,7 @@ async test "execute js run plan builds temp module and runs through v8" {
   let dir = "/tmp/mizchi_v8_oden_run_build_fixture"
   write_temp_run_module(dir, async_main=true)
   let result = execute_js_run_plan_in_cwd(test_run_plan(["run"]), dir)
-  inspect(result, content="Ok(0)")
+  @debug.debug_inspect(result, content="Ok(0)")
 }
 
 ///|
@@ -255,7 +255,7 @@ async test "run image cache is materialized under target dir" {
   let cache_exists = @fs.read_file(cache_snapshot_path(target_dir)).binary() catch {
     _ => Bytes::default()
   }
-  inspect(
+  @debug.debug_inspect(
     result.map(value => value + ":" + (cache_exists.length() > 0).to_string()),
     content="Ok(\"{\\\"hasPrepareRun\\\":true}:true\")",
   )

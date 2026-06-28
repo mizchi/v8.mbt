@@ -73,7 +73,7 @@ This document tracks the implementation status, design notes, and known limitati
 
 ## Design Notes
 
-- keep `Runtime` and handle types on the MoonBit side, and isolate the Rust bridge in a small staticlib
+- keep `Runtime` and handle types on the MoonBit side, and isolate the Rust bridge in a small native library
 - hide `rusty_v8` initialization and link complexity behind the Rust layer
 - stabilize the public API in MoonBit while keeping the Rust implementation replaceable
 - focus first on JSON and bytes as the two value lanes needed for runtime-loop experiments

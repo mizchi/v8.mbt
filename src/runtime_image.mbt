@@ -21,7 +21,7 @@ fn runtime_image_from_parts(
   with_node_compat : Bool,
 ) -> RuntimeImage {
   RuntimeImage::{
-    state: Ref::new(RuntimeImageState::{
+    state: Ref(RuntimeImageState::{
       snapshot,
       has_snapshot,
       modules,

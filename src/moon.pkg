@@ -1,13 +1,14 @@
 import {
-  "moonbitlang/async" @async,
-  "moonbitlang/core/strconv" @strconv,
-  "moonbitlang/core/encoding/utf8" @utf8,
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
 }
+
+supported_targets = "native"
 
 options(
   link: {
     "native": {
-      "cc-link-flags": "target/rusty_v8_bridge/release/librusty_v8_bridge.a -lc++ -pthread -framework CoreFoundation",
+      "cc-link-flags": "target/rusty_v8_bridge/release/librusty_v8_bridge.link -lc++ -pthread -framework CoreFoundation",
     },
   },
   "pre-build": [
@@ -17,5 +18,4 @@ options(
       "output": "build-stamps/rusty_v8_build.stamp",
     },
   ],
-  "supported-targets": "native",
 )

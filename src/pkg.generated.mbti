@@ -1,6 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "mizchi/v8"
 
+import {
+  "moonbitlang/core/debug",
+}
+
 // Values
 pub fn eval_async_bytes(String) -> Result[Bytes, V8Error]
 
@@ -58,6 +62,10 @@ pub fn snapshot_create(String) -> Result[Bytes, V8Error]
 
 pub fn snapshot_extend(Bytes, String) -> Result[Bytes, V8Error]
 
+pub fn utf8_decode_lossy(Bytes) -> String
+
+pub fn utf8_encode(String) -> Bytes
+
 pub fn version() -> String
 
 pub fn[T] with_runtime((Runtime) -> Result[T, V8Error]) -> Result[T, V8Error]
@@ -75,8 +83,7 @@ pub suberror V8Error {
   NativeError(String)
   PromiseClosed
   RuntimeClosed
-}
-pub impl Eq for V8Error
+} derive(Eq, @debug.Debug)
 pub impl Show for V8Error
 
 // Types and methods
@@ -142,8 +149,7 @@ pub enum PromiseState {
   Pending
   Fulfilled
   Rejected
-}
-pub impl Eq for PromiseState
+} derive(Eq, @debug.Debug)
 pub impl Show for PromiseState
 
 pub struct Runtime {

@@ -19,6 +19,9 @@ check:
 test:
     moon test --target {{target}}
 
+scripts-test:
+    bash src/scripts/build-rusty-v8_test.sh
+
 test-update:
     moon test --update --target {{target}}
 
@@ -53,6 +56,6 @@ info-check:
 clean:
     moon clean
 
-release-check: fmt info check test
+release-check: fmt info check test scripts-test
 
-ci: fmt-check info-check check test
+ci: fmt-check info-check check test scripts-test

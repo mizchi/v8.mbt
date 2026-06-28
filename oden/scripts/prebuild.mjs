@@ -40,18 +40,18 @@ function resolve_v8_module_root(module_root) {
 }
 
 function platform_link_flags(platform, module_root) {
-  const archive_path = path.join(
+  const link_path = path.join(
     module_root,
     "target",
     "rusty_v8_bridge",
     "release",
-    "librusty_v8_bridge.a",
+    "librusty_v8_bridge.link",
   )
   switch (platform) {
     case "darwin":
-      return `${archive_path} -lc++ -pthread -framework CoreFoundation`
+      return `${link_path} -lc++ -pthread -framework CoreFoundation`
     case "linux":
-      return `${archive_path} -lstdc++ -ldl -pthread`
+      return `${link_path} -lstdc++ -ldl -pthread`
     default:
       throw new Error(`oden prebuild does not support host platform ${platform}`)
   }
@@ -63,15 +63,15 @@ const module_root = input.paths?.module_root ?? process.cwd()
 const v8_root = resolve_v8_module_root(module_root)
 const build_script = path.join(v8_root, "src", "scripts", "build-rusty-v8.sh")
 const stamp_path = path.join(v8_root, "src", "build-stamps", "rusty_v8_build.stamp")
-const archive_path = path.join(
+const link_path = path.join(
   v8_root,
   "target",
   "rusty_v8_bridge",
   "release",
-  "librusty_v8_bridge.a",
+  "librusty_v8_bridge.link",
 )
 
-if (!fs.existsSync(archive_path)) {
+if (!fs.existsSync(link_path)) {
   const result = spawnSync("bash", [build_script, stamp_path], {
     cwd: v8_root,
     env: process.env,

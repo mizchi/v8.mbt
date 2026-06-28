@@ -27,7 +27,7 @@ fn take_native_error(err_ptr : Bytes, fallback : V8Error) -> V8Error {
   if native_ptr_is_null(err_ptr) {
     fallback
   } else {
-    let msg = @utf8.decode_lossy(native_error_message_bytes(err_ptr))
+    let msg = utf8_decode_lossy(native_error_message_bytes(err_ptr))
     native_error_delete_ptr(err_ptr)
     if msg == "" {
       fallback

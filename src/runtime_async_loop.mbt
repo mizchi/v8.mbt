@@ -181,7 +181,7 @@ async fn wait_for_promise_handle_async(
     for ;; {
       let state = handle.state()
       guard state is Ok(_) else { return Err(state.unwrap_err()) }
-      if not(state.unwrap() is PromiseState::Pending) {
+      if !(state.unwrap() is PromiseState::Pending) {
         break
       }
       let progressed = pump_async_tasks_once(runtime, group)
@@ -190,7 +190,7 @@ async fn wait_for_promise_handle_async(
       guard flushed is Ok(_) else { return Err(flushed.unwrap_err()) }
       let state = handle.state()
       guard state is Ok(_) else { return Err(state.unwrap_err()) }
-      if not(state.unwrap() is PromiseState::Pending) {
+      if !(state.unwrap() is PromiseState::Pending) {
         break
       }
       if progressed.unwrap() {

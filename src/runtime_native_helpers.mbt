@@ -29,7 +29,7 @@ fn native_string_result(
   fallback : String,
 ) -> Result[String, V8Error] {
   if native_ptr_is_null(err_ptr) {
-    Ok(@utf8.decode_lossy(result_bytes))
+    Ok(utf8_decode_lossy(result_bytes))
   } else {
     Err(take_native_error(err_ptr, V8Error::NativeError(fallback)))
   }
@@ -54,7 +54,7 @@ fn native_optional_id_result(
   value : UInt64,
   fallback : String,
 ) -> Result[UInt64?, V8Error] {
-  if not(native_ptr_is_null(err_ptr)) {
+  if !native_ptr_is_null(err_ptr) {
     Err(take_native_error(err_ptr, V8Error::NativeError(fallback)))
   } else if value == 0 {
     Ok(None)

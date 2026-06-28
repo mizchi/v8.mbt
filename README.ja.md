@@ -21,7 +21,7 @@
 
 ## ステータス
 
-- バージョン: `0.2.0`
+- バージョン: `0.3.0`
 - 対応 target: `native`
 - embedder 実験用として使える状態です
 - 実装状況と未実装項目は [docs/development-log.ja.md](docs/development-log.ja.md) に分離しています
@@ -62,6 +62,21 @@ node ../v8.mbt/src/scripts/setup-consumer.mjs --module-root . --main-pkg cmd/mai
 - GitHub、crates.io、`rusty_v8` release mirror へアクセスできるネットワーク
 
 公開 package 側でも `postadd` hook で bridge build は走ります。consumer module 側の 1 回限りの設定はまだ必要ですが、上の setup script で一般的な mooncakes 導線は自動化できます。
+
+### native build の egress と skip
+
+`build-rusty-v8.sh` は pinned `rusty_v8` source を GitHub の HTTPS archive endpoint から取得し、`deps/rusty_v8` をローカルで初期化します。source 取得には `git clone` egress が不要なので、HTTPS は通るが git channel だけ scoped / blocked される CI でも動かせます。ただし Cargo は引き続き crates.io と `rusty_v8` release mirror から prebuilt artifact を取得します。
+
+MoonBit workspace 解決だけを行う非 native job では、`moon add` / workspace 解決の前に `MIZCHI_V8_OPTIONAL=1` または `CRATER_SKIP_V8_BUILD=1` を設定してください。`postadd` hook は V8 build をせず、skipped stamp だけを書いて正常終了します。
+
+proxy 配下では、`rusty_v8` static archive を `curl` で事前取得し、local file を `RUSTY_V8_ARCHIVE` で渡すのが安全です。proxy の書き換えによって upstream downloader 側が `Decompression error` を出す経路を避けられます。
+
+```bash
+target=$(rustc -vV | awk '/host:/{print $2}')
+curl -L --fail -o /tmp/librusty_v8.a.gz \
+  "https://github.com/denoland/rusty_v8/releases/download/v146.8.0/librusty_v8_release_${target}.a.gz"
+RUSTY_V8_ARCHIVE=/tmp/librusty_v8.a.gz just bootstrap
+```
 
 ### ソースから開発する
 

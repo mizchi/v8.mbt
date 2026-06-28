@@ -88,7 +88,7 @@ fn runtime_set_resource_ref_state(
 fn runtime_resource_list_json(runtime : Runtime) -> Result[String, V8Error] {
   let listed = runtime.list_resources()
   guard listed is Ok(_) else { return Err(listed.unwrap_err()) }
-  let values : Map[String, Json] = Map::new()
+  let values : Map[String, Json] = Map([])
   listed
   .unwrap()
   .each(resource => {
@@ -99,9 +99,10 @@ fn runtime_resource_list_json(runtime : Runtime) -> Result[String, V8Error] {
 
 ///|
 fn parse_resource_rid(payload_json : String) -> Result[Int, String] {
-  try @strconv.parse_int(payload_json.trim()) |> Ok catch {
-    StrConvError(message) =>
-      Err("invalid resource id payload: " + payload_json + " (" + message + ")")
+  match parse_ascii_int(payload_json.trim()) {
+    Ok(value) => Ok(value)
+    Err(err) =>
+      Err("invalid resource id payload: " + payload_json + " (" + err + ")")
   }
 }
 

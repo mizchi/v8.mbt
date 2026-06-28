@@ -40,18 +40,18 @@ function resolve_v8_module_root(module_root) {
 }
 
 function platform_link_flags(platform, module_root) {
-  const archive_path = path.join(
+  const link_path = path.join(
     module_root,
     "target",
     "rusty_v8_bridge",
     "release",
-    "librusty_v8_bridge.a",
+    "librusty_v8_bridge.link",
   )
   switch (platform) {
     case "darwin":
-      return `${archive_path} -lc++ -pthread -framework CoreFoundation`
+      return `${link_path} -lc++ -pthread -framework CoreFoundation`
     case "linux":
-      return `${archive_path} -lstdc++ -ldl -pthread`
+      return `${link_path} -lstdc++ -ldl -pthread`
     default:
       throw new Error(
         `mizchi/v8 consumer setup does not support host platform ${platform}`,

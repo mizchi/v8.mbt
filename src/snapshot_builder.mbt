@@ -44,7 +44,7 @@ pub struct SnapshotBuilder {
 ///|
 pub fn snapshot_builder_new() -> SnapshotBuilder {
   SnapshotBuilder::{
-    state: Ref::new(SnapshotBuilderState::{
+    state: Ref(SnapshotBuilderState::{
       snapshot: Bytes::default(),
       has_snapshot: false,
       sources: Array::default(),

@@ -6,7 +6,7 @@ pub fn Runtime::eval_bytes(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let source_bytes = @utf8.encode(source)
+  let source_bytes = utf8_encode(source)
   let result_bytes = runtime_eval_bytes_native(
     handle,
     source_bytes,
@@ -25,8 +25,8 @@ pub fn Runtime::eval_bytes_with_name(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let resource_name_bytes = @utf8.encode(resource_name)
-  let source_bytes = @utf8.encode(source)
+  let resource_name_bytes = utf8_encode(resource_name)
+  let source_bytes = utf8_encode(source)
   let result_bytes = runtime_eval_bytes_with_name_native(
     handle,
     resource_name_bytes,
@@ -48,7 +48,7 @@ pub fn Runtime::eval_async_bytes(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let source_bytes = @utf8.encode(source)
+  let source_bytes = utf8_encode(source)
   let result_bytes = runtime_eval_async_bytes_native(
     handle,
     source_bytes,
@@ -69,8 +69,8 @@ pub fn Runtime::eval_async_bytes_with_name(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let resource_name_bytes = @utf8.encode(resource_name)
-  let source_bytes = @utf8.encode(source)
+  let resource_name_bytes = utf8_encode(resource_name)
+  let source_bytes = utf8_encode(source)
   let result_bytes = runtime_eval_async_bytes_with_name_native(
     handle,
     resource_name_bytes,
@@ -93,7 +93,7 @@ pub fn Runtime::set_global_bytes(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   runtime_set_global_bytes_native(
     handle,
     name_bytes,
@@ -113,7 +113,7 @@ pub fn Runtime::get_global_bytes(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   let result_bytes = runtime_get_global_bytes_native(
     handle,
     name_bytes,
@@ -164,7 +164,7 @@ pub fn Runtime::call_global_bytes(
   let prepared = prepare_runtime_call(self)
   guard prepared is Ok(_) else { return Err(prepared.unwrap_err()) }
   let (handle, err_ptr) = prepared.unwrap()
-  let name_bytes = @utf8.encode(name)
+  let name_bytes = utf8_encode(name)
   let result_bytes = runtime_call_global_bytes_native(
     handle,
     name_bytes,

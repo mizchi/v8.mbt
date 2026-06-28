@@ -3,7 +3,16 @@ pub enum PromiseState {
   Pending
   Fulfilled
   Rejected
-} derive(Eq, Show)
+} derive(Eq, @debug.Debug)
+
+///|
+pub impl Show for PromiseState with fn output(self, logger) {
+  match self {
+    Pending => logger.write_string("Pending")
+    Fulfilled => logger.write_string("Fulfilled")
+    Rejected => logger.write_string("Rejected")
+  }
+}
 
 ///|
 struct PromiseHandleState {
@@ -22,7 +31,7 @@ fn promise_handle_from_runtime(
   handle : UInt64,
 ) -> PromiseHandle {
   PromiseHandle::{
-    state: Ref::new(PromiseHandleState::{ runtime: runtime.state, handle }),
+    state: Ref(PromiseHandleState::{ runtime: runtime.state, handle }),
   }
 }
 
@@ -76,7 +85,7 @@ pub fn Runtime::eval_promise_string(
   }
   let err_ptr = make_ptr_buffer()
   native_ptr_clear(err_ptr)
-  let source_bytes = @utf8.encode(source)
+  let source_bytes = utf8_encode(source)
   let promise_handle = runtime_eval_promise_native(
     handle,
     source_bytes,
@@ -90,7 +99,7 @@ pub fn Runtime::eval_promise_string(
         V8Error::NativeError("runtime_eval_promise_native failed"),
       ),
     )
-  } else if not(native_ptr_is_null(err_ptr)) {
+  } else if !native_ptr_is_null(err_ptr) {
     Err(
       take_native_error(
         err_ptr,
@@ -114,8 +123,8 @@ pub fn Runtime::eval_promise_string_with_name(
   }
   let err_ptr = make_ptr_buffer()
   native_ptr_clear(err_ptr)
-  let resource_name_bytes = @utf8.encode(resource_name)
-  let source_bytes = @utf8.encode(source)
+  let resource_name_bytes = utf8_encode(resource_name)
+  let source_bytes = utf8_encode(source)
   let promise_handle = runtime_eval_promise_with_name_native(
     handle,
     resource_name_bytes,
@@ -131,7 +140,7 @@ pub fn Runtime::eval_promise_string_with_name(
         V8Error::NativeError("runtime_eval_promise_with_name_native failed"),
       ),
     )
-  } else if not(native_ptr_is_null(err_ptr)) {
+  } else if !native_ptr_is_null(err_ptr) {
     Err(
       take_native_error(
         err_ptr,
@@ -238,7 +247,7 @@ pub fn PromiseHandle::state(
   let state_code = runtime_promise_state_native(
     runtime_handle, promise_handle, err_ptr,
   )
-  if not(native_ptr_is_null(err_ptr)) {
+  if !native_ptr_is_null(err_ptr) {
     Err(
       take_native_error(
         err_ptr,
@@ -267,7 +276,7 @@ pub fn PromiseHandle::result_string(
   let result_bytes = runtime_promise_result_native(
     runtime_handle, promise_handle, err_ptr,
   )
-  if not(native_ptr_is_null(err_ptr)) {
+  if !native_ptr_is_null(err_ptr) {
     Err(
       take_native_error(
         err_ptr,
@@ -275,7 +284,7 @@ pub fn PromiseHandle::result_string(
       ),
     )
   } else {
-    Ok(@utf8.decode_lossy(result_bytes))
+    Ok(utf8_decode_lossy(result_bytes))
   }
 }
 
@@ -296,7 +305,7 @@ pub fn PromiseHandle::result_json(
   let result_bytes = runtime_promise_result_json_native(
     runtime_handle, promise_handle, err_ptr,
   )
-  if not(native_ptr_is_null(err_ptr)) {
+  if !native_ptr_is_null(err_ptr) {
     Err(
       take_native_error(
         err_ptr,
@@ -304,7 +313,7 @@ pub fn PromiseHandle::result_json(
       ),
     )
   } else {
-    Ok(@utf8.decode_lossy(result_bytes))
+    Ok(utf8_decode_lossy(result_bytes))
   }
 }
 
@@ -325,7 +334,7 @@ pub fn PromiseHandle::result_bytes(
   let result_bytes = runtime_promise_result_bytes_native(
     runtime_handle, promise_handle, err_ptr,
   )
-  if not(native_ptr_is_null(err_ptr)) {
+  if !native_ptr_is_null(err_ptr) {
     Err(
       take_native_error(
         err_ptr,

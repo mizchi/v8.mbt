@@ -35,7 +35,7 @@ fn module_evaluation_promise_handle(
   let promise_handle = runtime_module_evaluation_promise_native(
     runtime_handle, module_handle, err_ptr,
   )
-  if not(native_ptr_is_null(err_ptr)) {
+  if !native_ptr_is_null(err_ptr) {
     Err(take_native_error(err_ptr, V8Error::NativeError(fallback)))
   } else {
     Ok(promise_handle)
@@ -53,7 +53,7 @@ pub fn Runtime::eval_module_handle_async_string(
   }
   let err_ptr = make_ptr_buffer()
   native_ptr_clear(err_ptr)
-  let source_bytes = @utf8.encode(source)
+  let source_bytes = utf8_encode(source)
   let module_handle = runtime_eval_module_handle_async_native(
     runtime_handle,
     source_bytes,
@@ -68,7 +68,7 @@ pub fn Runtime::eval_module_handle_async_string(
       ),
     )
   }
-  if not(native_ptr_is_null(err_ptr)) {
+  if !native_ptr_is_null(err_ptr) {
     return Err(
       take_native_error(
         err_ptr,
@@ -101,8 +101,8 @@ pub fn Runtime::eval_module_handle_async_string_with_specifier(
   }
   let err_ptr = make_ptr_buffer()
   native_ptr_clear(err_ptr)
-  let specifier_bytes = @utf8.encode(specifier)
-  let source_bytes = @utf8.encode(source)
+  let specifier_bytes = utf8_encode(specifier)
+  let source_bytes = utf8_encode(source)
   let module_handle = runtime_eval_module_handle_async_with_specifier_native(
     runtime_handle,
     specifier_bytes,
@@ -121,7 +121,7 @@ pub fn Runtime::eval_module_handle_async_string_with_specifier(
       ),
     )
   }
-  if not(native_ptr_is_null(err_ptr)) {
+  if !native_ptr_is_null(err_ptr) {
     return Err(
       take_native_error(
         err_ptr,
