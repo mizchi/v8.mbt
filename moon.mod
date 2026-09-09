@@ -21,6 +21,7 @@ preferred_target = "native"
 supported_targets = [ "native" ]
 
 options(
+  "--moonbit-unstable-prebuild": "src/scripts/prebuild.mjs",
   source: "src",
   exclude: [
     "_build",

@@ -13,11 +13,14 @@ fmt-check:
 bootstrap:
     bash src/scripts/build-rusty-v8.sh _build/bootstrap/rusty_v8.stamp
 
+build:
+    moon build
+
 check:
     moon check --deny-warn --target {{target}}
 
 test:
-    moon test --target {{target}}
+    moon test --deny-warn --target {{target}}
 
 scripts-test:
     bash src/scripts/build-rusty-v8_test.sh
@@ -56,6 +59,6 @@ info-check:
 clean:
     moon clean
 
-release-check: fmt info check test scripts-test
+release-check: fmt info check build test scripts-test
 
-ci: fmt-check info-check check test scripts-test
+ci: fmt-check info-check check build test scripts-test

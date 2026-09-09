@@ -98,7 +98,9 @@ export CARGO_TARGET_DIR="$bridge_target_dir"
   cd "$bridge_dir"
   cargo build --release
   if [[ "$host_os" == "Darwin" ]]; then
-    export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-undefined -C link-arg=-Wl,dynamic_lookup"
+    # Resolve V8's system dependencies in the dylib itself. Only MoonBit runtime
+    # symbols need dynamic lookup from the embedding executable.
+    export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-undefined -C link-arg=-Wl,dynamic_lookup -C link-arg=-lc++ -C link-arg=-framework -C link-arg=CoreFoundation"
     # `--crate-type` must be cargo's own flag, not a rustc passthrough after
     # `--`: passed through, cargo does not know an extra crate type was built,
     # so it leaves the artifact in `release/deps/lib<name>-<hash>.dylib` and

@@ -128,6 +128,7 @@ SH
 #!/usr/bin/env bash
 set -euo pipefail
 echo "$*" >> "${FAKE_LOG_DIR}/cargo.log"
+echo "${RUSTFLAGS:-}" >> "${FAKE_LOG_DIR}/rustflags.log"
 mkdir -p "${CARGO_TARGET_DIR}/release/deps"
 
 crate_type=""
@@ -241,6 +242,8 @@ test_build_uplifts_darwin_cdylib() {
     fail "darwin bridge link does not point at the dylib"
   assert_file_contains "$log_dir/cargo.log" "rustc --release --lib --crate-type cdylib"
   assert_file_not_contains "$log_dir/cargo.log" "-- --crate-type cdylib"
+  assert_file_contains "$log_dir/rustflags.log" "-C link-arg=-lc++"
+  assert_file_contains "$log_dir/rustflags.log" "-C link-arg=-framework -C link-arg=CoreFoundation"
 }
 
 test_postadd_respects_skip_env

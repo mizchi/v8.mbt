@@ -80,7 +80,7 @@ fn add_deno_named_resource_json(
   name : String,
 ) -> Result[String, String] {
   let rid = runtime_add_resource_entry(runtime, name, None, true)
-  guard rid is Ok(_) else { return Err(rid.unwrap_err().to_string()) }
+  guard rid is Ok(_) else { return Err(Show::to_string(rid.unwrap_err())) }
   Ok(json_int(rid.unwrap()))
 }
 
@@ -91,7 +91,7 @@ fn install_deno_core_runtime_compat(runtime : Runtime) -> Result[Unit, V8Error] 
     _payload => {
       let resources_json = runtime_resource_list_json(runtime)
       guard resources_json is Ok(_) else {
-        return Err(resources_json.unwrap_err().to_string())
+        return Err(Show::to_string(resources_json.unwrap_err()))
       }
       Ok(resources_json.unwrap())
     },
@@ -105,7 +105,9 @@ fn install_deno_core_runtime_compat(runtime : Runtime) -> Result[Unit, V8Error] 
       let rid = parse_resource_rid(payload_json)
       guard rid is Ok(_) else { return Err(rid.unwrap_err()) }
       let closed = runtime.close_resource(rid.unwrap())
-      guard closed is Ok(_) else { return Err(closed.unwrap_err().to_string()) }
+      guard closed is Ok(_) else {
+        return Err(Show::to_string(closed.unwrap_err()))
+      }
       Ok("null")
     },
   )
@@ -118,7 +120,9 @@ fn install_deno_core_runtime_compat(runtime : Runtime) -> Result[Unit, V8Error] 
       let rid = parse_resource_rid(payload_json)
       guard rid is Ok(_) else { return Err(rid.unwrap_err()) }
       let closed = runtime.try_close_resource(rid.unwrap())
-      guard closed is Ok(_) else { return Err(closed.unwrap_err().to_string()) }
+      guard closed is Ok(_) else {
+        return Err(Show::to_string(closed.unwrap_err()))
+      }
       Ok(Json::boolean(closed.unwrap()).stringify())
     },
   )
@@ -147,7 +151,9 @@ fn install_deno_core_runtime_compat(runtime : Runtime) -> Result[Unit, V8Error] 
       let rid = parse_resource_rid(payload_json)
       guard rid is Ok(_) else { return Err(rid.unwrap_err()) }
       let exists = runtime_resource_exists(runtime, rid.unwrap())
-      guard exists is Ok(_) else { return Err(exists.unwrap_err().to_string()) }
+      guard exists is Ok(_) else {
+        return Err(Show::to_string(exists.unwrap_err()))
+      }
       Ok(json_bool(exists.unwrap()))
     },
   )
@@ -189,7 +195,7 @@ fn install_deno_core_runtime_compat(runtime : Runtime) -> Result[Unit, V8Error] 
       guard rid is Ok(_) else { return Err(rid.unwrap_err()) }
       let changed = runtime.ref_resource(rid.unwrap())
       guard changed is Ok(_) else {
-        return Err(changed.unwrap_err().to_string())
+        return Err(Show::to_string(changed.unwrap_err()))
       }
       Ok(json_bool(changed.unwrap()))
     },
@@ -204,7 +210,7 @@ fn install_deno_core_runtime_compat(runtime : Runtime) -> Result[Unit, V8Error] 
       guard rid is Ok(_) else { return Err(rid.unwrap_err()) }
       let changed = runtime.unref_resource(rid.unwrap())
       guard changed is Ok(_) else {
-        return Err(changed.unwrap_err().to_string())
+        return Err(Show::to_string(changed.unwrap_err()))
       }
       Ok(json_bool(changed.unwrap()))
     },
