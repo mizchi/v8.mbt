@@ -1789,8 +1789,9 @@ pub extern "C" fn moonbit_ptr_sizeof() -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn moonbit_ptr_is_null(bytes: *const u8) -> bool {
-    unsafe { read_raw_ptr(bytes).is_null() }
+pub extern "C" fn moonbit_ptr_is_null(bytes: *const u8) -> i32 {
+    // MoonBit's native Bool ABI is int32_t, not Rust/C's one-byte bool.
+    i32::from(unsafe { read_raw_ptr(bytes).is_null() })
 }
 
 #[no_mangle]

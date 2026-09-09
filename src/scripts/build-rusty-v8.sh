@@ -98,7 +98,9 @@ export CARGO_TARGET_DIR="$bridge_target_dir"
   cd "$bridge_dir"
   cargo build --release
   if [[ "$host_os" == "Darwin" ]]; then
-    export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-undefined -C link-arg=-Wl,dynamic_lookup"
+    # Resolve V8's system dependencies in the dylib itself. Only MoonBit runtime
+    # symbols need dynamic lookup from the embedding executable.
+    export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-undefined -C link-arg=-Wl,dynamic_lookup -C link-arg=-lc++ -C link-arg=-framework -C link-arg=CoreFoundation"
     # `--crate-type` must be cargo's own flag, not a rustc passthrough after
     # `--`: passed through, cargo does not know an extra crate type was built,
     # so it leaves the artifact in `release/deps/lib<name>-<hash>.dylib` and
@@ -111,6 +113,17 @@ export CARGO_TARGET_DIR="$bridge_target_dir"
 library="$bridge_target_dir/release/librusty_v8_bridge.a"
 if [[ "$host_os" == "Darwin" ]]; then
   library="$bridge_target_dir/release/librusty_v8_bridge.dylib"
+elif [[ "$host_os" == "Linux" ]]; then
+  # The prebuilt Linux V8 archive uses non-PIC TLS and cannot form a cdylib.
+  # Rename its simdutf definitions AND references throughout the static archive
+  # so they cannot collide with MoonBit's own bundled simdutf in release builds.
+  symbol_map="$bridge_target_dir/release/simdutf-symbols.map"
+  nm --extern-only --defined-only --format=posix "$library" |
+    awk '$1 ~ /simdutf/ && $2 ~ /^[A-Za-z]$/ { print $1 " mizchi_v8_" $1 }' |
+    sort -u > "$symbol_map"
+  isolated_library="$bridge_target_dir/release/librusty_v8_bridge_isolated.a"
+  objcopy --redefine-syms="$symbol_map" "$library" "$isolated_library"
+  library="$isolated_library"
 fi
 if [[ ! -f "$library" ]]; then
   echo "missing $library" >&2

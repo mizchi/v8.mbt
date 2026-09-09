@@ -58,7 +58,8 @@ node ../v8.mbt/src/scripts/setup-consumer.mjs --module-root . --main-pkg cmd/mai
 - `bash`
 - Rust toolchain with `cargo`
 - a native C/C++ toolchain
-- `node` for the bundled consumer setup / prebuild scripts
+- GNU binutils (`nm`, `objcopy`) on Linux
+- Node.js 24+ for the build prebuild hook and bundled consumer setup scripts
 - network access to GitHub, crates.io, and the `rusty_v8` release mirror
 
 The published package also uses a `postadd` hook to eagerly build the native bridge in the installed module cache. The one-time consumer module setup is still required today, but the setup script above automates the common mooncakes workflow.

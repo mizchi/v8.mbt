@@ -128,6 +128,7 @@ SH
 #!/usr/bin/env bash
 set -euo pipefail
 echo "$*" >> "${FAKE_LOG_DIR}/cargo.log"
+echo "${RUSTFLAGS:-}" >> "${FAKE_LOG_DIR}/rustflags.log"
 mkdir -p "${CARGO_TARGET_DIR}/release/deps"
 
 crate_type=""
@@ -153,15 +154,33 @@ for arg in "$@"; do
 done
 
 if [[ "$crate_type" == "cdylib" ]]; then
-  printf 'fake dylib\n' > "${CARGO_TARGET_DIR}/release/deps/librusty_v8_bridge-0123456789abcdef.dylib"
+  extension=so
+  if [[ "${FAKE_UNAME_S:-Linux}" == Darwin ]]; then
+    extension=dylib
+  fi
+  printf 'fake dylib\n' > "${CARGO_TARGET_DIR}/release/deps/librusty_v8_bridge-0123456789abcdef.$extension"
   if [[ "$uplift" == true ]]; then
-    printf 'fake dylib\n' > "${CARGO_TARGET_DIR}/release/librusty_v8_bridge.dylib"
+    printf 'fake dylib\n' > "${CARGO_TARGET_DIR}/release/librusty_v8_bridge.$extension"
   fi
 else
   printf 'fake archive\n' > "${CARGO_TARGET_DIR}/release/librusty_v8_bridge.a"
 fi
 SH
   chmod +x "$bin_dir/cargo"
+
+  cat > "$bin_dir/nm" <<'SH'
+#!/usr/bin/env bash
+printf '_ZN7simdutf4testEv T 0 1\nmoonbit_v8_version_bytes T 0 1\n'
+SH
+  chmod +x "$bin_dir/nm"
+
+  cat > "$bin_dir/objcopy" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+cp "${1#--redefine-syms=}" "${FAKE_LOG_DIR}/symbol-map"
+cp "$2" "$3"
+SH
+  chmod +x "$bin_dir/objcopy"
 
   cat > "$bin_dir/uname" <<'SH'
 #!/usr/bin/env bash
@@ -215,6 +234,13 @@ test_build_fetches_rusty_v8_archive_without_git_clone() {
   assert_file_contains "$log_dir/curl.log" "https://github.com/denoland/rusty_v8/archive/v146.8.0.tar.gz"
   assert_file_contains "$log_dir/git.log" "init"
   assert_file_not_contains "$log_dir/git.log" "clone"
+  local release_dir="$root/target/rusty_v8_bridge/release"
+  [[ -f "$release_dir/librusty_v8_bridge_isolated.a" ]] ||
+    fail "linux build did not isolate the static bridge symbols"
+  [[ "$(readlink "$release_dir/librusty_v8_bridge.link")" == "librusty_v8_bridge_isolated.a" ]] ||
+    fail "linux bridge link must point at the isolated archive"
+  assert_file_contains "$log_dir/symbol-map" "_ZN7simdutf4testEv mizchi_v8__ZN7simdutf4testEv"
+  assert_file_not_contains "$log_dir/symbol-map" "moonbit_v8_version_bytes"
 }
 
 test_build_uplifts_darwin_cdylib() {
@@ -241,6 +267,8 @@ test_build_uplifts_darwin_cdylib() {
     fail "darwin bridge link does not point at the dylib"
   assert_file_contains "$log_dir/cargo.log" "rustc --release --lib --crate-type cdylib"
   assert_file_not_contains "$log_dir/cargo.log" "-- --crate-type cdylib"
+  assert_file_contains "$log_dir/rustflags.log" "-C link-arg=-lc++"
+  assert_file_contains "$log_dir/rustflags.log" "-C link-arg=-framework -C link-arg=CoreFoundation"
 }
 
 test_postadd_respects_skip_env
