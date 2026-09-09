@@ -154,9 +154,13 @@ for arg in "$@"; do
 done
 
 if [[ "$crate_type" == "cdylib" ]]; then
-  printf 'fake dylib\n' > "${CARGO_TARGET_DIR}/release/deps/librusty_v8_bridge-0123456789abcdef.dylib"
+  extension=so
+  if [[ "${FAKE_UNAME_S:-Linux}" == Darwin ]]; then
+    extension=dylib
+  fi
+  printf 'fake dylib\n' > "${CARGO_TARGET_DIR}/release/deps/librusty_v8_bridge-0123456789abcdef.$extension"
   if [[ "$uplift" == true ]]; then
-    printf 'fake dylib\n' > "${CARGO_TARGET_DIR}/release/librusty_v8_bridge.dylib"
+    printf 'fake dylib\n' > "${CARGO_TARGET_DIR}/release/librusty_v8_bridge.$extension"
   fi
 else
   printf 'fake archive\n' > "${CARGO_TARGET_DIR}/release/librusty_v8_bridge.a"
@@ -216,6 +220,11 @@ test_build_fetches_rusty_v8_archive_without_git_clone() {
   assert_file_contains "$log_dir/curl.log" "https://github.com/denoland/rusty_v8/archive/v146.8.0.tar.gz"
   assert_file_contains "$log_dir/git.log" "init"
   assert_file_not_contains "$log_dir/git.log" "clone"
+  local release_dir="$root/target/rusty_v8_bridge/release"
+  [[ -f "$release_dir/librusty_v8_bridge.so" ]] ||
+    fail "linux build did not uplift librusty_v8_bridge.so into release/"
+  [[ "$(readlink "$release_dir/librusty_v8_bridge.link")" == "librusty_v8_bridge.so" ]] ||
+    fail "linux bridge must use a shared library to isolate V8's simdutf symbols"
 }
 
 test_build_uplifts_darwin_cdylib() {
