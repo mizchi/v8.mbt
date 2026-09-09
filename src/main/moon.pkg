@@ -4,8 +4,9 @@ import {
 
 supported_targets = "native"
 
+pkgtype(kind: "executable")
+
 options(
-  "is-main": true,
   link: {
     "native": {
       "cc-link-flags": "target/rusty_v8_bridge/release/librusty_v8_bridge.link -lc++ -pthread -framework CoreFoundation",

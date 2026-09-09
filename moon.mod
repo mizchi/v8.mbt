@@ -3,7 +3,7 @@ name = "mizchi/v8"
 version = "0.3.0"
 
 import {
-  "moonbitlang/async@0.16.8",
+  "moonbitlang/async@0.21.3",
 }
 
 readme = "README.md"

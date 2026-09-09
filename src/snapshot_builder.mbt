@@ -45,9 +45,9 @@ pub struct SnapshotBuilder {
 pub fn snapshot_builder_new() -> SnapshotBuilder {
   SnapshotBuilder::{
     state: Ref(SnapshotBuilderState::{
-      snapshot: Bytes::default(),
+      snapshot: Default::default(),
       has_snapshot: false,
-      sources: Array::default(),
+      sources: Default::default(),
       with_deno_core_compat: false,
       with_node_compat: false,
     }),
@@ -92,7 +92,7 @@ pub fn SnapshotBuilder::build_image(
         runtime_image_from_parts(
           snapshot,
           true,
-          Array::default(),
+          Default::default(),
           self.state.val.with_deno_core_compat,
           self.state.val.with_node_compat,
         ),

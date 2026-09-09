@@ -303,4 +303,3 @@ pub struct SyncJsonOpRequest {
 // Type aliases
 
 // Traits
-

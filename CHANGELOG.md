@@ -34,6 +34,7 @@ All notable changes to this project should be documented in this file.
 
 ### Changed
 
+- Bumped `moonbitlang/async` 0.16.8 -> 0.21.3; 0.16.8 no longer compiles against the current core (`IterResult` undefined in `task_group.mbt`). The public interface is unchanged
 - `build-rusty-v8.sh` now fetches the pinned `rusty_v8` source through GitHub HTTPS archives instead of `git clone`
 - Native build troubleshooting now documents scoped git egress, `postadd` skip envs, and `RUSTY_V8_ARCHIVE` proxy workarounds
 - GitHub Actions CI now verifies formatting and generated `.mbti` files
@@ -45,6 +46,8 @@ All notable changes to this project should be documented in this file.
 
 ### Fixed
 
+- Builds against the current `moonbitlang/core`: `parse_resource_rid` no longer calls the removed `@strconv.parse_int` / matches on the retired `StrConvError` constructor, and uses a local `parse_ascii_int` instead
+- Cleared every deprecation warning so `just check` (`--deny-warn`) is green again: `Show::output` instead of `String::output`, `Default::default()` instead of `Bytes::default()` / `Array::default()`, and `Array(capacity=..)` instead of `Array::new(capacity=..)`
 - `postadd` now respects `MIZCHI_V8_OPTIONAL` and `CRATER_SKIP_V8_BUILD` by writing a skipped stamp and exiting successfully
 - Removed the broken `hello()` example from the published README path
 - Aligned local `just` workflows with the CI entrypoints

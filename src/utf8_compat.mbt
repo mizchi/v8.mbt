@@ -8,7 +8,7 @@ fn push_utf8_byte(bytes : Array[Byte], value : Int) -> Unit {
 
 ///|
 pub fn utf8_encode(text : String) -> Bytes {
-  let out : Array[Byte] = Array::new(capacity=text.length())
+  let out : Array[Byte] = Array(capacity=text.length())
   text
   .iter()
   .each(fn(ch) {

@@ -6,7 +6,7 @@ pub struct ModuleSource {
 
 ///|
 pub fn module_source(specifier : String, source : String) -> ModuleSource {
-  ModuleSource::{ specifier, source }
+  ModuleSource::{ specifier, source, }
 }
 
 ///|
@@ -41,10 +41,10 @@ pub struct RuntimeBuilder {
 pub fn runtime_builder_new() -> RuntimeBuilder {
   RuntimeBuilder::{
     state: Ref(RuntimeBuilderState::{
-      snapshot: Bytes::default(),
+      snapshot: Default::default(),
       has_snapshot: false,
-      snapshot_sources: Array::default(),
-      modules: Array::default(),
+      snapshot_sources: Default::default(),
+      modules: Default::default(),
       with_deno_core_compat: false,
       with_node_compat: false,
     }),
@@ -123,15 +123,15 @@ pub fn RuntimeBuilder::build_image(
     runtime_image_from_parts(
       snapshot_result.unwrap(),
       true,
-      Array::default(),
+      Default::default(),
       self.state.val.with_deno_core_compat,
       self.state.val.with_node_compat,
     )
   } else {
     runtime_image_from_parts(
-      Bytes::default(),
+      Default::default(),
       false,
-      Array::default(),
+      Default::default(),
       self.state.val.with_deno_core_compat,
       self.state.val.with_node_compat,
     )

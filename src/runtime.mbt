@@ -131,7 +131,7 @@ fn runtime_from_handle(
           pending_tasks: 0,
           is_running: false,
         },
-        resources: RuntimeResourceTableState::{ next_rid: 1, entries: Map([]) },
+        resources: RuntimeResourceTableState::{ next_rid: 1, entries: Map([]), },
         compat: RuntimeCompatState::{
           has_deno_core_compat: false,
           has_node_compat: false,
