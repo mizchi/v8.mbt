@@ -13,13 +13,13 @@ pub impl Show for V8Error with fn output(self, logger) {
   match self {
     DependencyMissing(s) => {
       logger.write_string("DependencyMissing(")
-      s.output(logger)
+      Show::output(s, logger)
       logger.write_string(")")
     }
     ModuleClosed => logger.write_string("ModuleClosed")
     NativeError(s) => {
       logger.write_string("NativeError(")
-      s.output(logger)
+      Show::output(s, logger)
       logger.write_string(")")
     }
     PromiseClosed => logger.write_string("PromiseClosed")

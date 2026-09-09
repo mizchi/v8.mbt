@@ -33,7 +33,7 @@ fn runtime_image_from_parts(
 
 ///|
 pub fn runtime_image_new(snapshot : Bytes) -> RuntimeImage {
-  runtime_image_from_parts(snapshot, true, Array::default(), false, false)
+  runtime_image_from_parts(snapshot, true, Default::default(), false, false)
 }
 
 ///|

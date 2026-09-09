@@ -31,7 +31,7 @@ fn promise_handle_from_runtime(
   handle : UInt64,
 ) -> PromiseHandle {
   PromiseHandle::{
-    state: Ref(PromiseHandleState::{ runtime: runtime.state, handle }),
+    state: Ref(PromiseHandleState::{ runtime: runtime.state, handle, }),
   }
 }
 
@@ -47,7 +47,7 @@ fn promise_state_from_code(code : Int) -> Result[PromiseState, V8Error] {
 
 ///|
 fn promise_runtime(handle : PromiseHandle) -> Runtime {
-  Runtime::{ state: handle.state.val.runtime }
+  Runtime::{ state: handle.state.val.runtime, }
 }
 
 ///|

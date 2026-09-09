@@ -99,7 +99,12 @@ export CARGO_TARGET_DIR="$bridge_target_dir"
   cargo build --release
   if [[ "$host_os" == "Darwin" ]]; then
     export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-undefined -C link-arg=-Wl,dynamic_lookup"
-    cargo rustc --release --lib -- --crate-type cdylib
+    # `--crate-type` must be cargo's own flag, not a rustc passthrough after
+    # `--`: passed through, cargo does not know an extra crate type was built,
+    # so it leaves the artifact in `release/deps/lib<name>-<hash>.dylib` and
+    # never uplifts it to `release/lib<name>.dylib`, which is the path the
+    # link flags below point at.
+    cargo rustc --release --lib --crate-type cdylib
   fi
 )
 

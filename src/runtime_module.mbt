@@ -15,7 +15,7 @@ fn module_handle_from_runtime(
   handle : UInt64,
 ) -> ModuleHandle {
   ModuleHandle::{
-    state: Ref(ModuleHandleState::{ runtime: runtime.state, handle }),
+    state: Ref(ModuleHandleState::{ runtime: runtime.state, handle, }),
   }
 }
 

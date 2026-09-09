@@ -17,7 +17,7 @@ fail() {
 assert_file_contains() {
   local file="$1"
   local pattern="$2"
-  if ! grep -Fq "$pattern" "$file"; then
+  if ! grep -Fq -e "$pattern" "$file"; then
     echo "--- $file" >&2
     cat "$file" >&2
     fail "expected '$file' to contain '$pattern'"
@@ -27,7 +27,7 @@ assert_file_contains() {
 assert_file_not_contains() {
   local file="$1"
   local pattern="$2"
-  if [[ -f "$file" ]] && grep -Fq "$pattern" "$file"; then
+  if [[ -f "$file" ]] && grep -Fq -e "$pattern" "$file"; then
     echo "--- $file" >&2
     cat "$file" >&2
     fail "expected '$file' not to contain '$pattern'"
@@ -119,15 +119,60 @@ printf 'fake binding\n' > "$dest/gen/src_binding_release_aarch64-apple-darwin.rs
 SH
   chmod +x "$bin_dir/tar"
 
+  # Mirrors the artifact placement real cargo uses: `cargo build` uplifts the
+  # crate types declared in Cargo.toml into `release/`, and `cargo rustc` only
+  # uplifts an extra crate type when `--crate-type` is cargo's own flag. Passed
+  # through to rustc after `--`, the artifact is left in `release/deps/` under a
+  # metadata-suffixed name, which is what silently broke the Darwin bridge.
   cat > "$bin_dir/cargo" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "$*" >> "${FAKE_LOG_DIR}/cargo.log"
-mkdir -p "${CARGO_TARGET_DIR}/release"
-printf 'fake archive\n' > "${CARGO_TARGET_DIR}/release/librusty_v8_bridge.a"
-printf 'fake dylib\n' > "${CARGO_TARGET_DIR}/release/librusty_v8_bridge.dylib"
+mkdir -p "${CARGO_TARGET_DIR}/release/deps"
+
+crate_type=""
+passthrough=false
+uplift=false
+for arg in "$@"; do
+  case "$arg" in
+    --)
+      passthrough=true
+      ;;
+    --crate-type)
+      crate_type="pending"
+      if [[ "$passthrough" == false ]]; then
+        uplift=true
+      fi
+      ;;
+    *)
+      if [[ "$crate_type" == "pending" ]]; then
+        crate_type="$arg"
+      fi
+      ;;
+  esac
+done
+
+if [[ "$crate_type" == "cdylib" ]]; then
+  printf 'fake dylib\n' > "${CARGO_TARGET_DIR}/release/deps/librusty_v8_bridge-0123456789abcdef.dylib"
+  if [[ "$uplift" == true ]]; then
+    printf 'fake dylib\n' > "${CARGO_TARGET_DIR}/release/librusty_v8_bridge.dylib"
+  fi
+else
+  printf 'fake archive\n' > "${CARGO_TARGET_DIR}/release/librusty_v8_bridge.a"
+fi
 SH
   chmod +x "$bin_dir/cargo"
+
+  cat > "$bin_dir/uname" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  -s) echo "${FAKE_UNAME_S:-Linux}" ;;
+  -m) echo "${FAKE_UNAME_M:-x86_64}" ;;
+  *) echo "${FAKE_UNAME_S:-Linux}" ;;
+esac
+SH
+  chmod +x "$bin_dir/uname"
 }
 
 test_postadd_respects_skip_env() {
@@ -172,7 +217,34 @@ test_build_fetches_rusty_v8_archive_without_git_clone() {
   assert_file_not_contains "$log_dir/git.log" "clone"
 }
 
+test_build_uplifts_darwin_cdylib() {
+  local root="$tmp_root/build-darwin"
+  local fake_bin="$root/fake-bin"
+  local log_dir="$root/logs"
+  make_fixture_root "$root"
+  mkdir -p "$log_dir"
+  make_fake_path "$fake_bin"
+
+  FAKE_LOG_DIR="$log_dir" FAKE_UNAME_S=Darwin FAKE_UNAME_M=arm64 \
+    PATH="$fake_bin:$PATH" bash "$root/src/scripts/build-rusty-v8.sh" \
+    "$root/out/rusty_v8.stamp"
+
+  local release_dir="$root/target/rusty_v8_bridge/release"
+  # The cdylib has to be uplifted into `release/`; leaving it in `release/deps/`
+  # is what the `-- --crate-type cdylib` passthrough did, and the link flags in
+  # `src/moon.pkg` cannot see it there.
+  [[ -f "$release_dir/librusty_v8_bridge.dylib" ]] ||
+    fail "darwin build did not uplift librusty_v8_bridge.dylib into release/"
+  [[ -L "$release_dir/librusty_v8_bridge.link" ]] ||
+    fail "darwin build did not write stable bridge link"
+  [[ "$(readlink "$release_dir/librusty_v8_bridge.link")" == "librusty_v8_bridge.dylib" ]] ||
+    fail "darwin bridge link does not point at the dylib"
+  assert_file_contains "$log_dir/cargo.log" "rustc --release --lib --crate-type cdylib"
+  assert_file_not_contains "$log_dir/cargo.log" "-- --crate-type cdylib"
+}
+
 test_postadd_respects_skip_env
 test_build_fetches_rusty_v8_archive_without_git_clone
+test_build_uplifts_darwin_cdylib
 
 echo "script tests passed"
