@@ -7,7 +7,8 @@ const system_flags = {
   // The Darwin dylib links its own system dependencies. Repeating -lc++ here
   // produces duplicate-library warnings when Moon links blackbox tests.
   darwin: "",
-  linux: "-lstdc++ -ldl -pthread",
+  // GNU ld needs libm after the static V8 archive, even if Moon adds it earlier.
+  linux: "-lstdc++ -ldl -pthread -lm",
 }[process.platform]
 if (system_flags === undefined) {
   throw new Error(`mizchi/v8 does not support host platform ${process.platform}`)

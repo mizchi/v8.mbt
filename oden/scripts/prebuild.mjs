@@ -51,7 +51,7 @@ function platform_link_flags(platform, module_root) {
     case "darwin":
       return `${link_path} -lc++ -pthread -framework CoreFoundation`
     case "linux":
-      return `${link_path} -lstdc++ -ldl -pthread`
+      return `${link_path} -lstdc++ -ldl -pthread -lm`
     default:
       throw new Error(`oden prebuild does not support host platform ${platform}`)
   }
