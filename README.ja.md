@@ -58,6 +58,7 @@ node ../v8.mbt/src/scripts/setup-consumer.mjs --module-root . --main-pkg cmd/mai
 - `bash`
 - `cargo` を含む Rust toolchain
 - native C/C++ toolchain
+- Linux では GNU binutils (`nm`, `objcopy`)
 - ビルド時の prebuild hook と同梱 consumer setup script 用の Node.js 24+
 - GitHub、crates.io、`rusty_v8` release mirror へアクセスできるネットワーク
 

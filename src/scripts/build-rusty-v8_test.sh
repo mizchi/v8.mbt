@@ -168,6 +168,20 @@ fi
 SH
   chmod +x "$bin_dir/cargo"
 
+  cat > "$bin_dir/nm" <<'SH'
+#!/usr/bin/env bash
+printf '_ZN7simdutf4testEv T 0 1\nmoonbit_v8_version_bytes T 0 1\n'
+SH
+  chmod +x "$bin_dir/nm"
+
+  cat > "$bin_dir/objcopy" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+cp "${1#--redefine-syms=}" "${FAKE_LOG_DIR}/symbol-map"
+cp "$2" "$3"
+SH
+  chmod +x "$bin_dir/objcopy"
+
   cat > "$bin_dir/uname" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -221,10 +235,12 @@ test_build_fetches_rusty_v8_archive_without_git_clone() {
   assert_file_contains "$log_dir/git.log" "init"
   assert_file_not_contains "$log_dir/git.log" "clone"
   local release_dir="$root/target/rusty_v8_bridge/release"
-  [[ -f "$release_dir/librusty_v8_bridge.so" ]] ||
-    fail "linux build did not uplift librusty_v8_bridge.so into release/"
-  [[ "$(readlink "$release_dir/librusty_v8_bridge.link")" == "librusty_v8_bridge.so" ]] ||
-    fail "linux bridge must use a shared library to isolate V8's simdutf symbols"
+  [[ -f "$release_dir/librusty_v8_bridge_isolated.a" ]] ||
+    fail "linux build did not isolate the static bridge symbols"
+  [[ "$(readlink "$release_dir/librusty_v8_bridge.link")" == "librusty_v8_bridge_isolated.a" ]] ||
+    fail "linux bridge link must point at the isolated archive"
+  assert_file_contains "$log_dir/symbol-map" "_ZN7simdutf4testEv mizchi_v8__ZN7simdutf4testEv"
+  assert_file_not_contains "$log_dir/symbol-map" "moonbit_v8_version_bytes"
 }
 
 test_build_uplifts_darwin_cdylib() {

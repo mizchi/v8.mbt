@@ -73,6 +73,8 @@ jobs:
         run: just test
       - name: Moon release build
         run: moon build --release
+      - name: Moon release test
+        run: moon test --release --target native --deny-warn
       - name: Run example
         run: just run
       - name: Test build scripts

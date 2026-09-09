@@ -107,10 +107,6 @@ export CARGO_TARGET_DIR="$bridge_target_dir"
     # never uplifts it to `release/lib<name>.dylib`, which is the path the
     # link flags below point at.
     cargo rustc --release --lib --crate-type cdylib
-  elif [[ "$host_os" == "Linux" ]]; then
-    # Keep V8's bundled simdutf private to the bridge: MoonBit's release runtime
-    # also includes simdutf, so linking both static archives causes collisions.
-    cargo rustc --release --lib --crate-type cdylib
   fi
 )
 
@@ -118,7 +114,16 @@ library="$bridge_target_dir/release/librusty_v8_bridge.a"
 if [[ "$host_os" == "Darwin" ]]; then
   library="$bridge_target_dir/release/librusty_v8_bridge.dylib"
 elif [[ "$host_os" == "Linux" ]]; then
-  library="$bridge_target_dir/release/librusty_v8_bridge.so"
+  # The prebuilt Linux V8 archive uses non-PIC TLS and cannot form a cdylib.
+  # Rename its simdutf definitions AND references throughout the static archive
+  # so they cannot collide with MoonBit's own bundled simdutf in release builds.
+  symbol_map="$bridge_target_dir/release/simdutf-symbols.map"
+  nm --extern-only --defined-only --format=posix "$library" |
+    awk '$1 ~ /simdutf/ && $2 ~ /^[A-Za-z]$/ { print $1 " mizchi_v8_" $1 }' |
+    sort -u > "$symbol_map"
+  isolated_library="$bridge_target_dir/release/librusty_v8_bridge_isolated.a"
+  objcopy --redefine-syms="$symbol_map" "$library" "$isolated_library"
+  library="$isolated_library"
 fi
 if [[ ! -f "$library" ]]; then
   echo "missing $library" >&2
